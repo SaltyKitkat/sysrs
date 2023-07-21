@@ -1,33 +1,33 @@
-use std::{collections::HashMap, fmt::Debug};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Display},
+};
 
 use crate::Rc;
 
 pub(crate) mod mount;
+pub(crate) mod store;
 
-// #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
-// pub enum UnitKind {
-//     Service,
-//     Timer,
-//     Mount,
-//     Target,
-//     Socket,
-// }
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub enum UnitKind {
+    Service,
+    Timer,
+    Mount,
+    Target,
+    Socket,
+}
 
-// impl Display for UnitKind {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         let s = match self {
-//             UnitKind::Service => "service",
-//             UnitKind::Timer => "timer",
-//             UnitKind::Mount => "mount",
-//             UnitKind::Target => "target",
-//             UnitKind::Socket => "socket",
-//         };
-//         f.write_str(s)
-//     }
-// }
-
-pub trait UnitKind {
-    fn name(&self) -> &str;
+impl Display for UnitKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            UnitKind::Service => "service",
+            UnitKind::Timer => "timer",
+            UnitKind::Mount => "mount",
+            UnitKind::Target => "target",
+            UnitKind::Socket => "socket",
+        };
+        f.write_str(s)
+    }
 }
 
 #[derive(Debug)]
@@ -56,7 +56,7 @@ pub trait Unit: Debug {
     fn name(&self) -> Rc<str>;
     fn description(&self) -> Rc<str>;
     fn documentation(&self) -> Rc<str>;
-    fn kind(&self) -> &dyn UnitKind;
+    fn kind(&self) -> UnitKind;
 
     fn start(&mut self);
     fn stop(&mut self);
@@ -74,24 +74,5 @@ impl From<&dyn Unit> for UnitEntry {
         Self {
             name: value.name().clone(),
         }
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct UnitStore {
-    map: HashMap<UnitEntry, Box<dyn Unit>>,
-}
-
-impl UnitStore {
-    pub fn new() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
-    }
-
-    pub fn insert_unit(&mut self, unit: Box<dyn Unit>) {
-        let entry = unit.as_ref().into();
-        //. todo: handle insert existed unit
-        self.map.insert(entry, unit);
     }
 }

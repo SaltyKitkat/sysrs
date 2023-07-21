@@ -3,7 +3,7 @@ use rustix::process;
 use std::path::PathBuf;
 use tokio::{fs::OpenOptions, io::BufReader};
 
-use crate::unit::{mount::MountImpl, UnitImpl, UnitStore};
+use crate::unit::{mount::MountImpl, store::UnitStoreImpl, UnitImpl};
 
 type Rc<T> = std::rc::Rc<T>;
 // type Rc<T> = std::sync::Arc<T>;
@@ -33,13 +33,13 @@ fn main() {
 
 async fn async_main() {
     println!("tokio started!");
-    let mut store = UnitStore::new();
+    let mut store = UnitStoreImpl::new();
     println!("parsing fstab:");
     let path = PathBuf::from("/etc/fstab");
     let file = BufReader::new(OpenOptions::new().read(true).open(&path).await.unwrap());
     fstab::FsEntry::from_buf_reader(file)
         .map(|fs| -> Box<UnitImpl<MountImpl>> { Box::new(fs.into()) })
-        .for_each(|mount| ready(store.insert_unit(mount)))
+        .for_each(|mount| ready(store.insert(mount)))
         .await;
     dbg!(store);
     println!("tokio finished!");

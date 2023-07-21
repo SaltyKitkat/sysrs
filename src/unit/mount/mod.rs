@@ -18,12 +18,6 @@ pub struct MountImpl {
     options: Rc<str>,
 }
 
-impl UnitKind for MountImpl {
-    fn name(&self) -> &str {
-        todo!()
-    }
-}
-
 impl From<FsEntry> for MountImpl {
     fn from(value: FsEntry) -> Self {
         Self {
@@ -81,8 +75,8 @@ impl Unit for UnitImpl<MountImpl> {
         Rc::clone(&self.common.documentation)
     }
 
-    fn kind(&self) -> &dyn UnitKind {
-        todo!()
+    fn kind(&self) -> UnitKind {
+        UnitKind::Mount
     }
 
     fn start(&mut self) {

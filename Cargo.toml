@@ -5,11 +5,13 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
+async-trait = "0.1.71"
 futures = "0.3.28"
-# mimalloc = "0.1.37"
 rustix = { version = "0.38.2", features = ["fs", "process", "thread"] }
+tap = "1.0.1"
 tokio = { version = "1.29.1", features = ["fs", "parking_lot", "rt-multi-thread", "rt", "io-util", "net"] }
 tokio-stream = { version = "0.1.14", features = ["io-util"] }
+zbus = { version = "3.14.1", features = ["tokio"], default-features = false }
 
 [profile]
 [profile.dev.package."*"]

@@ -13,8 +13,47 @@
 
 # units
 
+```rust
+pub trait Unit {
+    fn name(&self) -> Rc<str>;
+    fn description(&self) -> Rc<str>;
+    fn documentation(&self) -> Rc<str>;
+    fn kind(&self) -> UnitKind;
+
+    fn deps(&self) -> UnitDeps;
+
+    fn start(&mut self);
+    fn stop(&mut self);
+    fn restart(&mut self);
+}
+```
+
+zbus server && client
+
+依赖解析：
+    双向依赖：requires && required_by
+    加载配置文件时
+    建立依赖图
+
+unit 启动：
+    使用workqueue
+        递归解算依赖并插入
+          重复添加依赖问题
+            执行任务前检查unit状态
+            性能问题
+workqueue:
+    实现异步&&并发启动
+      任务插入过程非阻塞
+      
+    默认依赖之间进行串行启动
+    todo: 特殊unit：socket 自动拉起service
+
+unit状态监控
+    使用cgroup进行状态管理？
+
+
 - mount & swap
-  - [x] parse fstab
+  - [X] parse fstab
     - device
       - [ ] LABEL
       - [ ] PARTLABEL

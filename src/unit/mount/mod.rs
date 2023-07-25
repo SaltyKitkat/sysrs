@@ -8,7 +8,7 @@ use crate::{
     Rc,
 };
 
-use super::{UnitCommonImpl, UnitImpl};
+use super::{UnitCommonImpl, UnitDeps, UnitEntry, UnitImpl};
 
 #[derive(Debug)]
 pub struct MountImpl {
@@ -32,7 +32,7 @@ impl From<FsEntry> for MountImpl {
 impl From<MountImpl> for UnitImpl<MountImpl> {
     fn from(value: MountImpl) -> Self {
         let name = value.where_.to_str().unwrap();
-        let name = (if name.starts_with("/") {
+        let name = (if name.starts_with('/') {
             if name.len() > 1 {
                 name[1..].replace('-', "\\x2d").replace('/', "-")
             } else {
@@ -98,5 +98,12 @@ impl Unit for UnitImpl<MountImpl> {
     fn restart(&mut self) {
         self.stop();
         self.start();
+    }
+
+    fn deps(&self) -> UnitDeps {
+        UnitDeps {
+            requires: vec![],
+            required_by: vec![UnitEntry::from("local-fs.target")],
+        }
     }
 }

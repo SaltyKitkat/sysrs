@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    fmt::{Debug, Display},
-};
+use std::fmt::{Debug, Display};
 
 use crate::Rc;
 
@@ -40,23 +37,40 @@ pub struct UnitCommonImpl {
 
 #[derive(Default, Debug)]
 pub struct UnitDeps {
-    // requires: (),
+    requires: Vec<UnitEntry>,
+    required_by: Vec<UnitEntry>,
     // wants: (),
     // after: (),
     // before: (),
     // confilcts: (),
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
+pub enum UnitStatus {
+    Uninit,
+    Stopped,
+    Starting,
+    Running,
+    Stopping,
+}
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct UnitEntry {
     name: Rc<str>,
 }
 
-pub trait Unit: Debug {
+impl From<&str> for UnitEntry {
+    fn from(value: &str) -> Self {
+        Self { name: value.into() }
+    }
+}
+
+pub trait Unit {
     fn name(&self) -> Rc<str>;
     fn description(&self) -> Rc<str>;
     fn documentation(&self) -> Rc<str>;
     fn kind(&self) -> UnitKind;
+
+    fn deps(&self) -> UnitDeps;
 
     fn start(&mut self);
     fn stop(&mut self);

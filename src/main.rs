@@ -39,7 +39,10 @@ async fn async_main() {
     let file = BufReader::new(OpenOptions::new().read(true).open(&path).await.unwrap());
     fstab::FsEntry::from_buf_reader(file)
         .map(|fs| -> Box<UnitImpl<MountImpl>> { Box::new(fs.into()) })
-        .for_each(|mount| ready(store.insert(mount)))
+        .for_each(|mount| {
+            store.insert(mount);
+            ready(())
+        })
         .await;
     dbg!(store);
     println!("tokio finished!");

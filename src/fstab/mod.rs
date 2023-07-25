@@ -121,7 +121,7 @@ impl TryFrom<&[&str]> for FsEntry {
                 let v: &[&str; 6] = value.try_into().unwrap();
                 v.try_into()
             }
-            len @ _ => Err(Error::Argnum(len)),
+            len => Err(Error::Argnum(len)),
         }
     }
 }

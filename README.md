@@ -7,10 +7,6 @@
   - rustc use this
   - safe and friendly api
 
-# signals
-
-- [ ] handle signals (references: sysmaster, systemd)
-
 # units
 
 ```rust
@@ -28,18 +24,18 @@ pub trait Unit {
 }
 ```
 
-zbus server && client
+dbus
+  [ ] zbus server && client
 
 依赖解析：
     双向依赖：requires && required_by
-    加载配置文件时
-    建立依赖图
+    加载配置文件时建立依赖图
 
 unit 启动：
     使用workqueue
         递归解算依赖并插入
           重复添加依赖问题
-            执行任务前检查unit状态
+            [ ] 执行任务前检查unit状态
             性能问题
 workqueue:
     实现异步&&并发启动
@@ -52,6 +48,13 @@ unit状态监控
     使用cgroup进行状态管理？
 
 
+# 一些细节：
+
+## signals
+
+- [ ] handle signals (references: sysmaster, systemd)
+
+## units
 - mount & swap
   - [X] parse fstab
     - device
@@ -80,9 +83,4 @@ unit状态监控
   - [ ] parse .socket file
 - target
   - [ ] parse .target file
-
-# deps
-
-- [ ] parse unit deps
-- [ ] resolve deps and generate dep tree
 

@@ -1,19 +1,53 @@
 # design choices
 
 - For never changed slices, use `Rc<[T]>` (or `Rc<str>`, `Rc<Path>`);
+  `Rc` is `Arc` or `Rc`, controlled by type alias.
 - For io operations, use async;
 - For other blocking operations, use `spawn_blocking`;
 - why use `rustix` rather than `libc` and `nix`
   - rustc use this
   - safe and friendly api
 
+# 整体架构
+
+- 配置文件读取：得到impl Unit，并填充足够信息（依赖，start,stop等等）
+  配置文件解析器：`File -> impl Unit`
+  特性：使用基于tokio的异步io
+
+- Unit store：存储unit静态信息
+  `insert/update: (&mut UnitStore, dyn Unit) -> ()`
+  `get: (&UnitStore, key: Unitkey) -> &dyn Unit`
+  无阻塞(?) 可以使用同步api
+  store
+    - 本体`Send + Sync`
+      保证多线程同步，在异步上下文之中可用
+
+- 依赖管理：按需(?)解算依赖，并控制依次启动/停止/重启等，并按需注册状态监视
+  - 需要大量访问unit store数据，可以使之与unit store在同一线程，或是作为unitstore的插件
+  - 实现：
+    - 无状态：简单的依赖解算
+      利用队列与栈，按照依赖树顺序启动unit, 并去重
+      `fn(UnitEntry, cond:FnMut(UnitEntry) -> bool, op: FnMut(UnitEntry))`
+
+- 状态管理器：记录、调整并监视unit运行时状态信息
+  - status: Running, Stopped, Stopping, Starting?
+  - monitor: 事件驱动 异步
+
+
 # units
 
 ```rust
 pub trait Unit {
     fn name(&self) -> Rc<str>;
-    fn description(&self) -> Rc<str>;
-    fn documentation(&self) -> Rc<str>;
+    // fn description(&self) -> Rc<str>;
+    // fn documentation(&self) -> Rc<str>;
+
+    // Kinds:
+    // mount
+    // service
+    // timer
+    // socket
+    // target
     fn kind(&self) -> UnitKind;
 
     fn deps(&self) -> UnitDeps;
@@ -37,6 +71,16 @@ unit 启动：
           重复添加依赖问题
             [ ] 执行任务前检查unit状态
             性能问题
+
+
+service:
+    使用tokio异步创建进程与指令运行
+    简单的状态转换（running/stopped）
+      on start: stopped -> running
+      on stop: running -> stopped
+    [ ] 进程的监控
+      on fail: running -> failed
+
 workqueue:
     实现异步&&并发启动
       任务插入过程非阻塞

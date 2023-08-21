@@ -3,7 +3,9 @@ use rustix::process;
 use std::path::PathBuf;
 use tokio::{fs::OpenOptions, io::BufReader};
 
-use crate::unit::{mount::MountImpl, store::UnitStoreImpl, UnitImpl};
+use crate::unit::{
+    mount::MountImpl, service::ServiceImpl, store::UnitStoreImpl, UnitCommonImpl, UnitImpl,
+};
 
 type Rc<T> = std::rc::Rc<T>;
 // type Rc<T> = std::sync::Arc<T>;
@@ -45,5 +47,18 @@ async fn async_main() {
         })
         .await;
     dbg!(store);
+    // let sshd_service = UnitImpl::<ServiceImpl> {
+    //     common: UnitCommonImpl {
+    //         name: "sshd.service".into(),
+    //         description: "".into(),
+    //         documentation: "".into(),
+    //         deps: todo!(),
+    //     },
+    //     kind: ServiceImpl {
+    //         exec_start: "echo service_started".into(),
+    //         exec_stop: "echo stopped".into(),
+    //         exec_restart: "echo restart".into(),
+    //     },
+    // };
     println!("tokio finished!");
 }

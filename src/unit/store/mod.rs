@@ -1,42 +1,18 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 
 use tap::Tap;
 
 use super::{Unit, UnitDeps, UnitEntry, UnitStatus};
 
 #[derive(Debug)]
-pub struct UnitState {
-    status: UnitStatus,
-    requires: HashSet<UnitEntry>,
-    required_by: HashSet<UnitEntry>,
-}
-
-impl UnitState {
-    fn uninit() -> Self {
-        Self {
-            status: UnitStatus::Uninit,
-            requires: HashSet::new(),
-            required_by: HashSet::new(),
-        }
-    }
-}
-
-impl UnitState {
-    // todo
-}
-
-#[derive(Debug)]
 pub struct UnitStoreImpl {
     map: HashMap<UnitEntry, Box<dyn Unit>>, // info in unit files
-    state_map: HashMap<UnitEntry, UnitState>, // runtime info
-                                            // dep_graph: (),                            // depinfo currently not used
 }
 
 impl UnitStoreImpl {
     pub fn new() -> Self {
         Self {
             map: HashMap::new(),
-            state_map: HashMap::new(),
         }
     }
 
@@ -46,20 +22,6 @@ impl UnitStoreImpl {
             Entry::Occupied(o) => o.into_mut().tap_mut(|o| **o = unit),
             Entry::Vacant(v) => v.insert(unit),
         };
-        let deps = unit.deps();
-        for u in &deps.required_by {
-            self.state_map
-                .entry(u.to_owned())
-                .or_insert_with(|| UnitState::uninit())
-                .requires
-                .insert(entry.clone());
-        }
-        let entry = self
-            .state_map
-            .entry(entry)
-            .or_insert_with(|| UnitState::uninit());
-        entry.requires.extend(deps.requires);
-        entry.required_by.extend(deps.required_by);
     }
 
     fn get(&self, entry: &UnitEntry) -> Option<&dyn Unit> {
@@ -73,36 +35,71 @@ impl UnitStoreImpl {
     fn clear(&mut self) {
         self.map.clear()
     }
+}
 
-    async fn start(&mut self, entry: &UnitEntry) {
+pub struct DepMgr {
+    map: HashMap<UnitEntry, UnitDeps>,
+}
 
-        // start deps;
-        // start unit;
-        // report status;
+impl DepMgr {
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
     }
-    async fn stop(&mut self, entry: &UnitEntry) {
-        // stop units dep on this? no
-        // stop unit;
+
+    pub fn insert(&mut self, unit: &dyn Unit) {
+        let entry: UnitEntry = unit.into();
+        let UnitDeps {
+            requires,
+            required_by,
+        } = unit.deps().clone();
+        for unit in &required_by {
+            self.map
+                .entry(unit.clone())
+                .or_default()
+                .requires
+                .push(entry.clone());
+        }
+        match self.map.entry(entry) {
+            Entry::Occupied(o) => o.into_mut().requires.extend(requires),
+            Entry::Vacant(v) => {
+                v.insert(UnitDeps {
+                    requires,
+                    required_by,
+                });
+            }
+        }
     }
-    async fn restart(&mut self, entry: &UnitEntry) {
-        // if not running, start
-        // else restart unit
+
+    pub fn do_with_deps(
+        &self,
+        unit: UnitEntry,
+        mut action: impl FnMut(&UnitEntry),
+        mut condition: impl FnMut(&UnitEntry) -> bool,
+    ) {
+        if !condition(&unit) {
+            return;
+        }
+        let mut stack = Vec::new();
+        let mut queue = VecDeque::new();
+        queue.push_back(unit);
+        while let Some(current) = queue.pop_front() {
+            if let Some(unit) = self.map.get(&current) {
+                queue.extend(unit.requires.iter().filter(|u| condition(u)).cloned());
+            }
+            if !stack.contains(&current) {
+                stack.push(current);
+            }
+        }
+        for unit in stack {
+            action(&unit);
+        }
     }
 }
 
-// when spawn a task:
-// 1. resolve deps, and add them to work queue
-// 2. wait for deps to start (?
-// 3. run start
-pub struct WorkQueueImpl {
-    queue: Vec<()>, // should be a FIFO
+struct UnitRuntimeInfo {
+    status: UnitStatus,
 }
 
-impl WorkQueueImpl {
-    fn new() -> Self {
-        Self { queue: Vec::new() }
-    }
-    fn push(&mut self, _unit: &dyn Unit) {
-        todo!()
-    }
-}
+pub struct UnitMonitor {}

@@ -3,6 +3,7 @@ use std::fmt::{Debug, Display};
 use crate::Rc;
 
 pub(crate) mod mount;
+pub(crate) mod service;
 pub(crate) mod store;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
@@ -35,7 +36,7 @@ pub struct UnitCommonImpl {
     deps: UnitDeps, // todo
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct UnitDeps {
     requires: Vec<UnitEntry>,
     required_by: Vec<UnitEntry>,
@@ -64,7 +65,7 @@ impl From<&str> for UnitEntry {
     }
 }
 
-pub trait Unit {
+pub trait Unit: Debug {
     fn name(&self) -> Rc<str>;
     fn description(&self) -> Rc<str>;
     fn documentation(&self) -> Rc<str>;
@@ -79,8 +80,8 @@ pub trait Unit {
 
 #[derive(Debug)]
 pub struct UnitImpl<KindImpl> {
-    common: UnitCommonImpl,
-    kind: KindImpl,
+    pub common: UnitCommonImpl,
+    pub kind: KindImpl,
 }
 
 impl From<&dyn Unit> for UnitEntry {

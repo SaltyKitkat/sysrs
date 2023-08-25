@@ -32,16 +32,6 @@ impl From<FsEntry> for MountImpl {
 impl From<MountImpl> for UnitImpl<MountImpl> {
     fn from(value: MountImpl) -> Self {
         let name = value.where_.to_str().unwrap();
-        // let name = (if name.starts_with('/') {
-        //     if name.len() > 1 {
-        //         name[1..].replace('-', "\\x2d").replace('/', "-")
-        //     } else {
-        //         String::from("-")
-        //     }
-        // } else {
-        //     name.replace('-', "\\x2d").replace('/', "-")
-        // } + ".mount")
-        //     .into();
         let name = (if let Some(s) = name.strip_prefix('/') {
             if s.is_empty() {
                 String::from('-')

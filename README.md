@@ -30,12 +30,10 @@
       `fn(UnitEntry, cond:FnMut(UnitEntry) -> bool, op: FnMut(UnitEntry))`
 
 - 状态管理器：记录、调整并监视unit运行时状态信息
-  - status: Running, Stopped, Stopping, Starting?
+  - RtStatus
+    - status: Running, Stopped, Stopping, Starting ...
+    - monitor handle
   - monitor: 事件驱动 异步
-    register: fn(signalkind, handler: FnOnce(stream) -> impl Future<Output = ()>)
-    - 事件处理框架：
-      - 接受信号量/事件 (sigchld)
-      - 触发回调(异步？) (wait with noblocking)
 
 - signal handler
   - 利用tokio自带机制完成注册

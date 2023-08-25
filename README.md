@@ -32,7 +32,44 @@
 - 状态管理器：记录、调整并监视unit运行时状态信息
   - status: Running, Stopped, Stopping, Starting?
   - monitor: 事件驱动 异步
+    register: fn(signalkind, handler: FnOnce(stream) -> impl Future<Output = ()>)
+    - 事件处理框架：
+      - 接受信号量/事件 (sigchld)
+      - 触发回调(异步？) (wait with noblocking)
 
+- signal handler
+  - 利用tokio自带机制完成注册
+  - 对于一个signal, 由于在tokio里面可以使用stream的形式处理，因此我们很容易得到以下注册方式：
+    ```rust
+    fn register_signal_handler<F, H>(signalkind: SignalKind, handler: H)
+    where
+        F: Future<Output = ()> + Send + 'static,
+        H: FnOnce(SignalStream) -> F,
+    {
+        let sig = SignalStream::new(signal(signalkind).unwrap());
+        tokio::spawn(handler(sig));
+    }
+
+    ```
+    其中 `handler`形式如下：
+    ```rust
+    let handler = |mut stream| async move {
+      // init here
+      while let Some(_) = stream.next().await {
+        // handle signal here
+      }
+    };
+    ```
+
+    运行时： signal发生 -> wait -> find pid and status -> find the event in monitor and trigger it
+    注册时： action -> register events of the service/unit
+
+    ```rust
+    enum Event {
+      SigChld(Pid, WaitStatus),
+    }
+    ```
+    EventSources --mpsc-> EventHandler --mpsc-> EventConsumers(Monitor)
 
 # units
 

@@ -1,10 +1,11 @@
 use futures::{future::ready, StreamExt};
 use rustix::process;
-use std::path::PathBuf;
-use tokio::{fs::OpenOptions, io::BufReader};
+use std::{path::PathBuf, time::Duration};
+use tokio::{fs::OpenOptions, io::BufReader, time::sleep};
 
-use crate::unit::{
-    mount::MountImpl, service::ServiceImpl, store::UnitStoreImpl, UnitCommonImpl, UnitImpl,
+use crate::{
+    unit::{mount::MountImpl, store::UnitStoreImpl, UnitImpl},
+    util::event::signal::register_sig_handlers,
 };
 
 type Rc<T> = std::rc::Rc<T>;
@@ -25,7 +26,7 @@ fn main() {
     // }
     println!("running as root");
     println!("starting tokio runtime...");
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
@@ -35,6 +36,7 @@ fn main() {
 
 async fn async_main() {
     println!("tokio started!");
+    register_sig_handlers();
     let mut store = UnitStoreImpl::new();
     println!("parsing fstab:");
     let path = PathBuf::from("/etc/fstab");
@@ -60,5 +62,6 @@ async fn async_main() {
     //         exec_restart: "echo restart".into(),
     //     },
     // };
+    sleep(Duration::from_secs(3)).await;
     println!("tokio finished!");
 }

@@ -1,20 +1,26 @@
 use std::collections::HashMap;
 
-use futures::select_biased;
 use rustix::process::{Pid, WaitStatus};
 use tokio::sync::mpsc::Receiver;
 
+pub(crate) struct Handler {}
+impl Handler {
+    fn handle(self, status: WaitStatus) {
+        todo!()
+    }
+}
+
 pub(crate) enum Message {
     Event(Pid, WaitStatus),
-    Register(Pid, ()),
+    Register(Pid, Handler),
 }
 
-pub(crate) struct Monitor {
+pub(crate) struct ProcessMonitor {
     rx: Receiver<Message>,
-    map: HashMap<Pid, ()>,
+    map: HashMap<Pid, Handler>,
 }
 
-impl Monitor {
+impl ProcessMonitor {
     fn new(rx: Receiver<Message>) -> Self {
         Self {
             rx,
@@ -26,8 +32,16 @@ impl Monitor {
         tokio::spawn(async move {
             while let Some(message) = self.rx.recv().await {
                 match message {
-                    Message::Event(_, _) => todo!(),
-                    Message::Register(_, _) => todo!(),
+                    Message::Event(pid, status) => {
+                        if let Some(handler) = self.map.remove(&pid) {
+                            handler.handle(status)
+                        } else {
+                            todo!()
+                        }
+                    }
+                    Message::Register(pid, handler) => {
+                        self.map.insert(pid, handler);
+                    }
                 }
             }
         });

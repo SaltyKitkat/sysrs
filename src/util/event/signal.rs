@@ -1,18 +1,19 @@
-use futures::{Future, StreamExt};
+use futures::Future;
 use rustix::process::{wait, WaitOptions};
-use tokio::signal::unix::{signal, SignalKind};
-use tokio_stream::wrappers::SignalStream;
+use tokio::signal::unix::{signal, Signal, SignalKind};
 
 pub(crate) fn register_sig_handlers() {
     // handle ctrl-c/SIGINT
-    register_signal_handler(SignalKind::interrupt(), |mut stream| async move {
-        while let Some(_) = stream.next().await {
-            println!("SIGINT!")
+    register_signal_handler(SignalKind::interrupt(), |mut signal| async move {
+        loop {
+            signal.recv().await;
+            println!("SIGINT!");
         }
     });
     // handle SIGCHLD
-    register_signal_handler(SignalKind::child(), |mut stream| async move {
-        while let Some(_) = stream.next().await {
+    register_signal_handler(SignalKind::child(), |mut signal| async move {
+        loop {
+            signal.recv().await;
             match wait(WaitOptions::NOHANG) {
                 Ok(Some((pid, status))) => todo!(), // interact with the monitor
                 Ok(None) => todo!(),
@@ -25,8 +26,8 @@ pub(crate) fn register_sig_handlers() {
 fn register_signal_handler<F, H>(signalkind: SignalKind, handler: H)
 where
     F: Future<Output = ()> + Send + 'static,
-    H: FnOnce(SignalStream) -> F,
+    H: FnOnce(Signal) -> F,
 {
-    let sig = SignalStream::new(signal(signalkind).unwrap());
+    let sig = signal(signalkind).unwrap();
     tokio::spawn(handler(sig));
 }

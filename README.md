@@ -42,18 +42,19 @@
     fn register_signal_handler<F, H>(signalkind: SignalKind, handler: H)
     where
         F: Future<Output = ()> + Send + 'static,
-        H: FnOnce(SignalStream) -> F,
+        H: FnOnce(Signal) -> F,
     {
-        let sig = SignalStream::new(signal(signalkind).unwrap());
+        let sig = signal(signalkind).unwrap();
         tokio::spawn(handler(sig));
     }
 
     ```
     其中 `handler`形式如下：
     ```rust
-    let handler = |mut stream| async move {
+    let handler = |mut signal| async move {
       // init here
-      while let Some(_) = stream.next().await {
+      loop {
+        signal.recv().await;
         // handle signal here
       }
     };

@@ -10,6 +10,23 @@
 
 # 整体架构
 
+- 使用Actor模型，并使用channel传递信息，其范式如下：
+  ```rust
+  struct Message { ... }
+  struct Actor { ... }
+  impl Actor {
+    fn new() -> Self
+    fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
+      tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+          // logic ...
+        }
+      })
+    }
+  }
+  ```
+  需要注意的是，如果需要在逻辑代码部分向其他Actor发送消息，则需要单独spawn出一个任务进行无阻塞的发送，以防止发送消息时发生等待，导致循引用的actors发生死锁（或使用unnounded channels,也可以解决这一问题）
+
 - 配置文件读取：得到impl Unit，并填充足够信息（依赖，start,stop等等）
   配置文件解析器：`File -> impl Unit`
   特性：使用基于tokio的异步io
@@ -19,8 +36,6 @@
   `get: (&UnitStore, key: Unitkey) -> &dyn Unit`
   无阻塞(?) 可以使用同步api
   store
-    - 本体`Send + Sync`
-      保证多线程同步，在异步上下文之中可用
     - Actor
 
 - 依赖管理：按需(?)解算依赖，并控制依次启动/停止/重启等，并按需注册状态监视

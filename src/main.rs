@@ -1,7 +1,14 @@
 use futures::{future::ready, StreamExt};
 use rustix::process;
 use std::{path::PathBuf, time::Duration};
-use tokio::{fs::OpenOptions, io::BufReader, time::sleep};
+use tokio::{
+    fs::OpenOptions,
+    io::BufReader,
+    sync::mpsc::{self, Sender},
+    time::sleep,
+};
+use unit::state::StateMap;
+use util::monitor::Monitor;
 
 use crate::{
     unit::{mount::Impl, store::UnitStore},
@@ -36,8 +43,8 @@ fn main() {
 
 async fn async_main() {
     println!("tokio started!");
-    register_sig_handlers();
-    let mut store = UnitStore::new();
+    let actors = Actors::new();
+    register_sig_handlers(&actors);
     println!("parsing fstab:");
     let path = PathBuf::from("/etc/fstab");
     let file = BufReader::new(OpenOptions::new().read(true).open(&path).await.unwrap());
@@ -64,4 +71,29 @@ async fn async_main() {
     // };
     sleep(Duration::from_secs(3)).await;
     println!("tokio finished!");
+}
+
+pub(crate) struct Actors {
+    store: Sender<unit::store::Message>,
+    state: Sender<unit::state::Message>,
+    monitor: Sender<util::monitor::Message>,
+}
+
+impl Actors {
+    fn new() -> Self {
+        let store_actor = UnitStore::new();
+        let state_actor = StateMap::new();
+        let monitor_actor = Monitor::new();
+        let (store, store_rx) = mpsc::channel(4);
+        let (state, state_rx) = mpsc::channel(4);
+        let (monitor, monitor_rx) = mpsc::channel(4);
+        store_actor.run(store_rx);
+        state_actor.run(state_rx);
+        monitor_actor.run(monitor_rx);
+        Self {
+            store,
+            state,
+            monitor,
+        }
+    }
 }

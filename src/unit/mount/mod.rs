@@ -2,13 +2,12 @@ use std::path::Path;
 
 use rustix::fs::{mount, unmount, MountFlags, UnmountFlags};
 
+use super::{UnitCommonImpl, UnitDeps, UnitEntry, UnitImpl};
 use crate::{
     fstab::FsEntry,
     unit::{Unit, UnitKind},
     Rc,
 };
-
-use super::{UnitCommonImpl, UnitDeps, UnitEntry, UnitImpl};
 
 #[derive(Debug)]
 pub struct Impl {
@@ -103,7 +102,7 @@ impl Unit for UnitImpl<Impl> {
     fn deps(&self) -> UnitDeps {
         UnitDeps {
             requires: vec![],
-            required_by: vec![UnitEntry::from("local-fs.target")],
+            // required_by: vec![UnitEntry::from("local-fs.target")],
         }
     }
 }

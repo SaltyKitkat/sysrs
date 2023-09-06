@@ -20,10 +20,10 @@ pub(crate) enum Action {
     Restart,
 }
 
-pub(crate) struct Message(UnitEntry, Action); // todo
+pub(crate) struct Message(UnitEntry, Action);
 
 impl UnitStore {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             map: HashMap::new(),
         }
@@ -32,13 +32,27 @@ impl UnitStore {
     pub(crate) fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
         tokio::task::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                todo!()
+                let entry = msg.0;
+                match msg.1 {
+                    Action::Update(unit) => self.insert(entry, unit),
+                    Action::Remove => {
+                        self.map.remove(&entry);
+                    }
+                    Action::Start => {
+                        if let Some(unit) = self.get(&entry) {
+                            todo!("start a unit")
+                        } else {
+                            todo!("handle missing unit")
+                        }
+                    }
+                    Action::Stop => todo!(),
+                    Action::Restart => todo!(),
+                }
             }
         })
     }
 
-    fn insert(&mut self, unit: Item) {
-        let entry: UnitEntry = (unit.as_ref() as &dyn Unit).into();
+    fn insert(&mut self, entry: UnitEntry, unit: Item) {
         let unit = match self.map.entry(entry.clone()) {
             Entry::Occupied(o) => o.into_mut().tap_mut(|o| **o = unit),
             Entry::Vacant(v) => v.insert(unit),
@@ -65,29 +79,29 @@ impl DepMgr {
         }
     }
 
-    pub fn insert(&mut self, unit: &dyn Unit) {
-        let entry: UnitEntry = unit.into();
-        let UnitDeps {
-            requires,
-            required_by,
-        } = unit.deps().clone();
-        for unit in &required_by {
-            self.map
-                .entry(unit.clone())
-                .or_default()
-                .requires
-                .push(entry.clone());
-        }
-        match self.map.entry(entry) {
-            Entry::Occupied(o) => o.into_mut().requires.extend(requires),
-            Entry::Vacant(v) => {
-                v.insert(UnitDeps {
-                    requires,
-                    required_by,
-                });
-            }
-        }
-    }
+    // pub fn insert(&mut self, unit: &dyn Unit) {
+    //     let entry: UnitEntry = unit.into();
+    //     let UnitDeps {
+    //         requires,
+    //         required_by,
+    //     } = unit.deps().clone();
+    //     for unit in &required_by {
+    //         self.map
+    //             .entry(unit.clone())
+    //             .or_default()
+    //             .requires
+    //             .push(entry.clone());
+    //     }
+    //     match self.map.entry(entry) {
+    //         Entry::Occupied(o) => o.into_mut().requires.extend(requires),
+    //         Entry::Vacant(v) => {
+    //             v.insert(UnitDeps {
+    //                 requires,
+    //                 required_by,
+    //             });
+    //         }
+    //     }
+    // }
 
     pub fn do_with_deps(
         &self,

@@ -40,7 +40,7 @@ pub struct UnitCommonImpl {
 #[derive(Default, Debug, Clone)]
 pub struct UnitDeps {
     requires: Vec<UnitEntry>,
-    required_by: Vec<UnitEntry>,
+    // required_by: Vec<UnitEntry>,
     // wants: (),
     // after: (),
     // before: (),

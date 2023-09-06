@@ -1,10 +1,11 @@
-use tokio::process;
+use std::process::ExitStatus;
+
+use futures::Future;
+use tokio::{io, process};
 
 use crate::Rc;
 
-use super::{Unit, UnitCommonImpl, UnitDeps, UnitImpl, UnitKind};
-
-mod sshd;
+use super::{Unit, UnitDeps, UnitImpl, UnitKind};
 
 #[derive(Debug)]
 pub struct ServiceImpl {
@@ -45,22 +46,21 @@ impl Unit for UnitImpl<ServiceImpl> {
     }
 
     fn start(&mut self) {
-        let exec_start = &self.kind.exec_start;
-        let mut args = exec_start.split_ascii_whitespace();
-        let child = process::Command::new(args.next().unwrap())
-            .args(args)
-            .spawn();
+        tokio::spawn(run_cmd(&self.kind.exec_start));
     }
 
     fn stop(&mut self) {
-        let exec_stop = &self.kind.exec_stop;
-        let mut args = exec_stop.split_ascii_whitespace();
-        let status = process::Command::new(args.next().unwrap())
-            .args(args)
-            .status();
+        tokio::spawn(run_cmd(&self.kind.exec_stop));
     }
 
     fn restart(&mut self) {
-        todo!()
+        tokio::spawn(run_cmd(&self.kind.exec_restart));
     }
+}
+
+pub(self) fn run_cmd(cmd: &str) -> impl Future<Output = io::Result<ExitStatus>> {
+    let mut cmd = cmd.split_ascii_whitespace();
+    process::Command::new(cmd.next().unwrap())
+        .args(cmd)
+        .status()
 }

@@ -1,22 +1,43 @@
 use std::collections::{hash_map::Entry, HashMap, VecDeque};
 
 use tap::Tap;
+use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 
-use super::{Unit, UnitDeps, UnitEntry, UnitStatus};
+use super::{Unit, UnitDeps, UnitEntry};
+
+type Item = Box<dyn Unit + Send>;
 
 #[derive(Debug)]
-pub struct UnitStoreImpl {
-    map: HashMap<UnitEntry, Box<dyn Unit>>, // info in unit files
+pub(crate) struct UnitStore {
+    map: HashMap<UnitEntry, Item>, // info in unit files
 }
 
-impl UnitStoreImpl {
+pub(crate) enum Action {
+    Update(Item),
+    Remove,
+    Start,
+    Stop,
+    Restart,
+}
+
+pub(crate) struct Message(UnitEntry, Action); // todo
+
+impl UnitStore {
     pub fn new() -> Self {
         Self {
             map: HashMap::new(),
         }
     }
 
-    pub fn insert(&mut self, unit: Box<dyn Unit>) {
+    pub(crate) fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
+        tokio::task::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+                todo!()
+            }
+        })
+    }
+
+    fn insert(&mut self, unit: Item) {
         let entry: UnitEntry = (unit.as_ref() as &dyn Unit).into();
         let unit = match self.map.entry(entry.clone()) {
             Entry::Occupied(o) => o.into_mut().tap_mut(|o| **o = unit),
@@ -24,12 +45,8 @@ impl UnitStoreImpl {
         };
     }
 
-    fn get(&self, entry: &UnitEntry) -> Option<&dyn Unit> {
+    fn get(&self, entry: &UnitEntry) -> Option<&(dyn Unit + Send)> {
         self.map.get(entry).map(AsRef::as_ref)
-    }
-
-    fn get_status(&self, entry: &UnitEntry) -> UnitStatus {
-        todo!()
     }
 
     fn clear(&mut self) {
@@ -97,9 +114,3 @@ impl DepMgr {
         }
     }
 }
-
-struct UnitRuntimeInfo {
-    status: UnitStatus,
-}
-
-pub struct UnitMonitor {}

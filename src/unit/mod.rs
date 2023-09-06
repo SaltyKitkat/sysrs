@@ -4,6 +4,7 @@ use crate::Rc;
 
 pub(crate) mod mount;
 pub(crate) mod service;
+pub(crate) mod state;
 pub(crate) mod store;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
@@ -46,15 +47,6 @@ pub struct UnitDeps {
     // confilcts: (),
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum UnitStatus {
-    Uninit,
-    Stopped,
-    Failed,
-    Starting,
-    Running,
-    Stopping,
-}
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct UnitEntry {
     name: Rc<str>,

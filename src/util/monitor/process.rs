@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use rustix::process::{Pid, WaitStatus};
-use tokio::sync::mpsc::Receiver;
+use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 
 pub(crate) trait Handler: Send {
     fn handle(self: Box<Self>, pid: Pid, status: WaitStatus);
@@ -13,22 +13,20 @@ pub(crate) enum Message {
 }
 
 pub(crate) struct ProcessMonitor {
-    rx: Receiver<Message>,
     map: HashMap<Pid, Box<dyn Handler>>,
 }
 
 impl ProcessMonitor {
-    fn new(rx: Receiver<Message>) -> Self {
+    fn new() -> Self {
         Self {
-            rx,
             map: HashMap::new(),
         }
     }
 
-    fn run(mut self) {
+    fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
         tokio::spawn(async move {
-            while let Some(message) = self.rx.recv().await {
-                match message {
+            while let Some(msg) = rx.recv().await {
+                match msg {
                     Message::Event(pid, status) => {
                         if let Some(handler) = self.map.remove(&pid) {
                             handler.handle(pid, status)
@@ -41,6 +39,6 @@ impl ProcessMonitor {
                     }
                 }
             }
-        });
+        })
     }
 }

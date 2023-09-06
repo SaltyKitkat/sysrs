@@ -11,14 +11,14 @@ use crate::{
 use super::{UnitCommonImpl, UnitDeps, UnitEntry, UnitImpl};
 
 #[derive(Debug)]
-pub struct MountImpl {
+pub struct Impl {
     what: Rc<Path>,
     where_: Rc<Path>,
     type_: Rc<str>,
     options: Rc<str>,
 }
 
-impl From<FsEntry> for MountImpl {
+impl From<FsEntry> for Impl {
     fn from(value: FsEntry) -> Self {
         Self {
             what: value.fs_spec,
@@ -29,8 +29,8 @@ impl From<FsEntry> for MountImpl {
     }
 }
 
-impl From<MountImpl> for UnitImpl<MountImpl> {
-    fn from(value: MountImpl) -> Self {
+impl From<Impl> for UnitImpl<Impl> {
+    fn from(value: Impl) -> Self {
         let name = value.where_.to_str().unwrap();
         let name = (if let Some(s) = name.strip_prefix('/') {
             if s.is_empty() {
@@ -55,14 +55,14 @@ impl From<MountImpl> for UnitImpl<MountImpl> {
     }
 }
 
-impl From<FsEntry> for UnitImpl<MountImpl> {
+impl From<FsEntry> for UnitImpl<Impl> {
     fn from(value: FsEntry) -> Self {
-        let mount_impl: MountImpl = value.into();
+        let mount_impl: Impl = value.into();
         mount_impl.into()
     }
 }
 
-impl Unit for UnitImpl<MountImpl> {
+impl Unit for UnitImpl<Impl> {
     fn name(&self) -> Rc<str> {
         Rc::clone(&self.common.name)
     }

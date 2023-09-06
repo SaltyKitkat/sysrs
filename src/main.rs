@@ -4,7 +4,7 @@ use std::{path::PathBuf, time::Duration};
 use tokio::{fs::OpenOptions, io::BufReader, time::sleep};
 
 use crate::{
-    unit::{mount::MountImpl, store::UnitStoreImpl, UnitImpl},
+    unit::{mount::Impl, store::UnitStore},
     util::event::signal::register_sig_handlers,
 };
 
@@ -37,18 +37,18 @@ fn main() {
 async fn async_main() {
     println!("tokio started!");
     register_sig_handlers();
-    let mut store = UnitStoreImpl::new();
+    let mut store = UnitStore::new();
     println!("parsing fstab:");
     let path = PathBuf::from("/etc/fstab");
     let file = BufReader::new(OpenOptions::new().read(true).open(&path).await.unwrap());
-    fstab::FsEntry::from_buf_reader(file)
-        .map(|fs| -> Box<UnitImpl<MountImpl>> { Box::new(fs.into()) })
-        .for_each(|mount| {
-            store.insert(mount);
-            ready(())
-        })
-        .await;
-    dbg!(store);
+    // fstab::FsEntry::from_buf_reader(file)
+    //     .map(|fs| -> Box<UnitImpl<MountImpl>> { Box::new(fs.into()) })
+    //     .for_each(|mount| {
+    //         store.insert(mount);
+    //         ready(())
+    //     })
+    //     .await;
+    // dbg!(store);
     // let sshd_service = UnitImpl::<ServiceImpl> {
     //     common: UnitCommonImpl {
     //         name: "sshd.service".into(),

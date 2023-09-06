@@ -3,20 +3,29 @@ use std::process::ExitStatus;
 use futures::Future;
 use tokio::{io, process};
 
+use super::{Unit, UnitDeps, UnitImpl, UnitKind};
 use crate::Rc;
 
-use super::{Unit, UnitDeps, UnitImpl, UnitKind};
+#[derive(Clone, Copy, Debug)]
+pub enum Kind {
+    Simple,
+    Forking,
+    Oneshot,
+    Notify,
+}
 
 #[derive(Debug)]
-pub struct ServiceImpl {
+pub struct Impl {
+    kind: Kind,
     exec_start: Rc<str>,
     exec_stop: Rc<str>,
     exec_restart: Rc<str>,
 }
 
-impl ServiceImpl {
-    pub fn new(start: Rc<str>, stop: Rc<str>, restart: Rc<str>) -> Self {
+impl Impl {
+    pub fn new(kind: Kind, start: Rc<str>, stop: Rc<str>, restart: Rc<str>) -> Self {
         Self {
+            kind,
             exec_start: start,
             exec_stop: stop,
             exec_restart: restart,
@@ -24,7 +33,7 @@ impl ServiceImpl {
     }
 }
 
-impl Unit for UnitImpl<ServiceImpl> {
+impl Unit for UnitImpl<Impl> {
     fn name(&self) -> Rc<str> {
         Rc::clone(&self.common.name)
     }

@@ -31,10 +31,10 @@
 
 - 状态管理器：记录、调整并监视unit运行时状态信息
   - RtStatus
-    - status: Running, Stopped, Stopping, Starting ...
+    - status: Running, Stopped, Stopping, Starting, Failed ...
     - monitor handle
-  - monitor: 事件驱动 异步
 
+- monitor: 事件驱动 异步
 - signal handler
   - 利用tokio自带机制完成注册
   - 对于一个signal, 由于在tokio里面可以使用stream的形式处理，因此我们很容易得到以下注册方式：

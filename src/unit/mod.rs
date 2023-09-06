@@ -50,6 +50,7 @@ pub struct UnitDeps {
 pub enum UnitStatus {
     Uninit,
     Stopped,
+    Failed,
     Starting,
     Running,
     Stopping,

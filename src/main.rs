@@ -8,8 +8,8 @@ use crate::{
     util::event::signal::register_sig_handlers,
 };
 
-type Rc<T> = std::rc::Rc<T>;
-// type Rc<T> = std::sync::Arc<T>;
+// type Rc<T> = std::rc::Rc<T>;
+type Rc<T> = std::sync::Arc<T>;
 
 mod fstab;
 mod unit;

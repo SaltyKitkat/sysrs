@@ -1,4 +1,3 @@
-use futures::{future::ready, StreamExt};
 use rustix::process;
 use std::{path::PathBuf, time::Duration};
 use tokio::{
@@ -10,10 +9,7 @@ use tokio::{
 use unit::state::StateMap;
 use util::monitor::Monitor;
 
-use crate::{
-    unit::{mount::Impl, store::UnitStore},
-    util::event::signal::register_sig_handlers,
-};
+use crate::{unit::store::UnitStore, util::event::signal::register_sig_handlers};
 
 // type Rc<T> = std::rc::Rc<T>;
 type Rc<T> = std::sync::Arc<T>;
@@ -81,15 +77,16 @@ pub(crate) struct Actors {
 
 impl Actors {
     fn new() -> Self {
-        let store_actor = UnitStore::new();
-        let state_actor = StateMap::new();
-        let monitor_actor = Monitor::new();
-        let (store, store_rx) = mpsc::channel(4);
-        let (state, state_rx) = mpsc::channel(4);
-        let (monitor, monitor_rx) = mpsc::channel(4);
-        store_actor.run(store_rx);
-        state_actor.run(state_rx);
-        monitor_actor.run(monitor_rx);
+        const CHANNEL_LEN: usize = 4;
+
+        let (store, store_rx) = mpsc::channel(CHANNEL_LEN);
+        let (state, state_rx) = mpsc::channel(CHANNEL_LEN);
+        let (monitor, monitor_rx) = mpsc::channel(CHANNEL_LEN);
+
+        UnitStore::new().run(store_rx);
+        StateMap::new().run(state_rx);
+        Monitor::new().run(monitor_rx);
+
         Self {
             store,
             state,

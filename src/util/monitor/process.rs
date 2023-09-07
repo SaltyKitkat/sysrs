@@ -12,18 +12,18 @@ pub(crate) enum Message {
     Register(Pid, Box<dyn Handler>),
 }
 
-pub(crate) struct ProcessMonitor {
+pub(crate) struct Monitor {
     map: HashMap<Pid, Box<dyn Handler>>,
 }
 
-impl ProcessMonitor {
-    fn new() -> Self {
+impl Monitor {
+    pub(super) fn new() -> Self {
         Self {
             map: HashMap::new(),
         }
     }
 
-    fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
+    pub(super) fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
                 match msg {

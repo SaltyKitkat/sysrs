@@ -1,6 +1,7 @@
 use std::process::ExitStatus;
 
 use futures::Future;
+use rustix::thread::Pid;
 use tokio::{io, process};
 
 use super::{Unit, UnitDeps, UnitImpl, UnitKind};
@@ -55,21 +56,43 @@ impl Unit for UnitImpl<Impl> {
     }
 
     fn start(&mut self) {
-        tokio::spawn(run_cmd(&self.kind.exec_start));
+        // todo: set state: starting
+        match run_cmd(&self.sub.exec_start) {
+            Ok(pid) => {
+                let handler = match self.sub.kind {
+                    Kind::Simple => {
+                        // todo: handle exit code and set state
+                    }
+                    Kind::Forking => todo!(),
+                    Kind::Oneshot => todo!(),
+                    Kind::Notify => todo!(),
+                };
+            }
+            Err(e) => todo!("handle error"),
+        };
+        // todo: set state: running
     }
 
     fn stop(&mut self) {
-        tokio::spawn(run_cmd(&self.kind.exec_stop));
+        match run_cmd(&self.sub.exec_stop) {
+            Ok(_) => todo!(),
+            Err(_) => todo!(),
+        };
     }
 
     fn restart(&mut self) {
-        tokio::spawn(run_cmd(&self.kind.exec_restart));
+        match run_cmd(&self.sub.exec_restart) {
+            Ok(_) => todo!(),
+            Err(_) => todo!(),
+        };
     }
 }
 
-pub(self) fn run_cmd(cmd: &str) -> impl Future<Output = io::Result<ExitStatus>> {
+pub(self) fn run_cmd(cmd: &str) -> std::io::Result<Option<Pid>> {
     let mut cmd = cmd.split_ascii_whitespace();
-    process::Command::new(cmd.next().unwrap())
+    Ok(process::Command::new(cmd.next().unwrap())
         .args(cmd)
-        .status()
+        .spawn()?
+        .id()
+        .and_then(|pid| Pid::from_raw(pid as _)))
 }

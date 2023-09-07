@@ -47,10 +47,7 @@ impl From<Impl> for UnitImpl<Impl> {
             documentation: String::new().into(),
             deps: Default::default(),
         };
-        Self {
-            common,
-            kind: value,
-        }
+        Self { common, sub: value }
     }
 }
 
@@ -79,7 +76,10 @@ impl Unit for UnitImpl<Impl> {
     }
 
     fn start(&mut self) {
-        let Self { common: _, kind } = self;
+        let Self {
+            common: _,
+            sub: kind,
+        } = self;
         mount(
             kind.what.as_ref(),
             kind.where_.as_ref(),
@@ -90,7 +90,10 @@ impl Unit for UnitImpl<Impl> {
     }
 
     fn stop(&mut self) {
-        let Self { common: _, kind } = self;
+        let Self {
+            common: _,
+            sub: kind,
+        } = self;
         unmount(kind.where_.as_ref(), UnmountFlags::empty());
     }
 

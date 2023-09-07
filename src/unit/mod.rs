@@ -74,7 +74,7 @@ pub trait Unit: Debug {
 #[derive(Debug)]
 pub struct UnitImpl<KindImpl> {
     pub common: UnitCommonImpl,
-    pub kind: KindImpl,
+    pub sub: KindImpl,
 }
 
 impl From<&dyn Unit> for UnitEntry {

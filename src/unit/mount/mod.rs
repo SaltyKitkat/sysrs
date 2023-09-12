@@ -1,4 +1,4 @@
-use rustix::fs::MountFlags;
+use rustix::fs::{MountFlags, UnmountFlags};
 use tokio::sync::mpsc::Sender;
 
 use super::{UnitCommonImpl, UnitDeps, UnitImpl};
@@ -7,7 +7,7 @@ use crate::{
     unit::{Unit, UnitKind},
     util::{
         job::{self, create_blocking_job},
-        mount::mount,
+        mount::{mount, unmount},
     },
     Rc,
 };
@@ -80,7 +80,7 @@ impl Unit for UnitImpl<Impl> {
         UnitKind::Mount
     }
 
-    fn start(&self, job_manager: &Sender<job::Message>) {
+    fn start(&self, job_manager: Sender<job::Message>) {
         let Self {
             common: _,
             sub: mount_info,
@@ -94,15 +94,22 @@ impl Unit for UnitImpl<Impl> {
         )
     }
 
-    fn stop(&self) {
+    fn stop(&self, job_manager: Sender<job::Message>) {
         let Self {
             common: _,
             sub: mount_info,
         } = self;
+        let mount_info = mount_info.clone();
+        create_blocking_job(
+            job_manager.clone(),
+            Box::new(move || {
+                unmount(mount_info, UnmountFlags::empty());
+            }),
+        )
         // unmount(kind.mount_point.as_ref(), UnmountFlags::empty());
     }
 
-    fn restart(&self) {
+    fn restart(&self, job_manager: Sender<job::Message>) {
         todo!()
     }
 

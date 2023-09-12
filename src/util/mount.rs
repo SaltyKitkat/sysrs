@@ -1,4 +1,4 @@
-use rustix::fs::{mount as _mount, MountFlags};
+use rustix::fs::{mount as _mount, unmount as _unmount, MountFlags, UnmountFlags};
 
 use crate::{fstab::MountInfo, Rc};
 
@@ -16,4 +16,9 @@ pub(crate) fn mount(mount_info: Rc<MountInfo>, flags: MountFlags) {
         flags,
         data.as_ref(),
     );
+}
+
+pub(crate) fn unmount(mount_info: Rc<MountInfo>, flags: UnmountFlags) {
+    let MountInfo { mount_point, .. } = mount_info.as_ref();
+    _unmount(mount_point.as_ref(), flags);
 }

@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 
 use tokio::sync::mpsc::Sender;
 
-use crate::{util::job, Actors, Rc};
+use crate::{util::job, Rc};
 
 pub(crate) mod mount;
 pub(crate) mod service;
@@ -68,9 +68,9 @@ pub(crate) trait Unit: Debug {
 
     fn deps(&self) -> UnitDeps;
 
-    fn start(&self, job_manager: &Sender<job::Message>);
-    fn stop(&self);
-    fn restart(&self);
+    fn start(&self, job_manager: Sender<job::Message>);
+    fn stop(&self, job_manager: Sender<job::Message>);
+    fn restart(&self, job_manager: Sender<job::Message>);
 }
 
 #[derive(Debug)]

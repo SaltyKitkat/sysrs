@@ -1,11 +1,7 @@
-use std::process::ExitStatus;
+use tokio::sync::mpsc::Sender;
 
-use futures::Future;
-use rustix::thread::Pid;
-use tokio::{io, process, sync::mpsc::Sender};
-
-use super::{Unit, UnitDeps, UnitEntry, UnitImpl, UnitKind};
-use crate::{util::job, Actors, Rc};
+use super::{Unit, UnitDeps, UnitImpl, UnitKind};
+use crate::{util::job, Rc};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
@@ -55,17 +51,17 @@ impl Unit for UnitImpl<Impl> {
         todo!()
     }
 
-    fn start(&self, job_manager: &Sender<job::Message>) {
+    fn start(&self, job_manager: Sender<job::Message>) {
         // todo: check state and set state: starting (CAS)
         // should impl in UnitStore, not in Unit::start
         // todo: send job to job manager and let it to set state due to job status
     }
 
-    fn stop(&self) {
+    fn stop(&self, job_manager: Sender<job::Message>) {
         todo!()
     }
 
-    fn restart(&self) {
+    fn restart(&self, job_manager: Sender<job::Message>) {
         todo!()
     }
 }

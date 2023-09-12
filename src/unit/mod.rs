@@ -1,6 +1,8 @@
 use std::fmt::{Debug, Display};
 
-use crate::Rc;
+use tokio::sync::mpsc::Sender;
+
+use crate::{util::job, Actors, Rc};
 
 pub(crate) mod mount;
 pub(crate) mod service;
@@ -48,7 +50,7 @@ pub struct UnitDeps {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct UnitEntry {
+pub(crate) struct UnitEntry {
     name: Rc<str>,
 }
 
@@ -58,7 +60,7 @@ impl From<&str> for UnitEntry {
     }
 }
 
-pub trait Unit: Debug {
+pub(crate) trait Unit: Debug {
     fn name(&self) -> Rc<str>;
     fn description(&self) -> Rc<str>;
     fn documentation(&self) -> Rc<str>;
@@ -66,13 +68,13 @@ pub trait Unit: Debug {
 
     fn deps(&self) -> UnitDeps;
 
-    fn start(&mut self);
-    fn stop(&mut self);
-    fn restart(&mut self);
+    fn start(&self, job_manager: &Sender<job::Message>);
+    fn stop(&self);
+    fn restart(&self);
 }
 
 #[derive(Debug)]
-pub struct UnitImpl<KindImpl> {
+pub(crate) struct UnitImpl<KindImpl> {
     pub common: UnitCommonImpl,
     pub sub: KindImpl,
 }

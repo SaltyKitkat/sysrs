@@ -52,6 +52,14 @@ impl UnitStore {
         })
     }
 
+    fn start(&self, entry: UnitEntry) {
+        // query unit state
+        // get deps
+        // start(self, deps)
+        // tell job manager, which will set the unit state later, to run the start job
+        // done
+    }
+
     fn insert(&mut self, entry: UnitEntry, unit: Item) {
         let unit = match self.map.entry(entry.clone()) {
             Entry::Occupied(o) => o.into_mut().tap_mut(|o| **o = unit),
@@ -103,7 +111,7 @@ impl DepMgr {
     //     }
     // }
 
-    pub fn do_with_deps(
+    pub(crate) fn do_with_deps(
         &self,
         unit: UnitEntry,
         mut action: impl FnMut(&UnitEntry),

@@ -16,7 +16,7 @@
   struct Actor { ... }
   impl Actor {
     fn new() -> Self
-    fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
+    fn run(self, mut rx: Receiver<Message>) -> JoinHandle<()> {
       tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
           // logic ...
@@ -25,7 +25,8 @@
     }
   }
   ```
-  需要注意的是，如果需要在逻辑代码部分向其他Actor发送消息，则需要单独spawn出一个任务进行无阻塞的发送，以防止发送消息时发生等待，导致循引用的actors发生死锁（或使用unnounded channels,也可以解决这一问题）
+  需要注意的是，如果需要在逻辑代码部分向其他Actor发送消息，则需要单独spawn出一个任务进行无阻塞的发送，以防止发送消息时发生等待，导致循环引用的actors发生死锁
+  （或使用unnounded channels,也可以解决这一问题，但可能造成内存不受控膨胀且难以排查）
 
 - 配置文件读取：得到impl Unit，并填充足够信息（依赖，start,stop等等）
   配置文件解析器：`File -> impl Unit`
@@ -34,9 +35,10 @@
 - Unit store：存储unit静态信息
   `insert/update: (&mut UnitStore, dyn Unit) -> ()`
   `get: (&UnitStore, key: Unitkey) -> &dyn Unit`
-  无阻塞(?) 可以使用同步api
   store
     - Actor
+
+- Jobmanager：触发job运行，触发相应unit进行状态转换，并向monitor提交监控信息
 
 - 依赖管理：按需(?)解算依赖，并控制依次启动/停止/重启等，并按需注册状态监视
   - 需要大量访问unit store数据，可以使之与unit store在同一线程，或是作为unitstore的插件

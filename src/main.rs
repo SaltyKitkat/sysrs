@@ -3,13 +3,16 @@ use std::{path::PathBuf, time::Duration};
 use tokio::{
     fs::OpenOptions,
     io::BufReader,
-    sync::mpsc::{self, Sender},
+    sync::mpsc::{channel, Sender},
     time::sleep,
 };
 use unit::state::StateMap;
 use util::monitor::Monitor;
 
-use crate::{unit::store::UnitStore, util::event::signal::register_sig_handlers};
+use crate::{
+    unit::store::UnitStore,
+    util::{event::signal::register_sig_handlers, job::JobManager},
+};
 
 // type Rc<T> = std::rc::Rc<T>;
 type Rc<T> = std::sync::Arc<T>;
@@ -73,24 +76,28 @@ pub(crate) struct Actors {
     store: Sender<unit::store::Message>,
     state: Sender<unit::state::Message>,
     monitor: Sender<util::monitor::Message>,
+    job: Sender<util::job::Message>,
 }
 
 impl Actors {
     fn new() -> Self {
         const CHANNEL_LEN: usize = 4;
 
-        let (store, store_rx) = mpsc::channel(CHANNEL_LEN);
-        let (state, state_rx) = mpsc::channel(CHANNEL_LEN);
-        let (monitor, monitor_rx) = mpsc::channel(CHANNEL_LEN);
+        let (store, store_rx) = channel(CHANNEL_LEN);
+        let (state, state_rx) = channel(CHANNEL_LEN);
+        let (monitor, monitor_rx) = channel(CHANNEL_LEN);
+        let (job, job_rx) = channel(CHANNEL_LEN);
 
         UnitStore::new().run(store_rx);
         StateMap::new().run(state_rx);
         Monitor::new().run(monitor_rx);
+        JobManager::new(state.clone(), monitor.clone()).run(job_rx);
 
         Self {
             store,
             state,
             monitor,
+            job,
         }
     }
 }

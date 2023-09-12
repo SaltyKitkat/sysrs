@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
-use tokio::{sync::mpsc::Receiver, task::JoinHandle};
+use tap::Pipe;
+use tokio::{
+    sync::{mpsc::Receiver, oneshot},
+    task::JoinHandle,
+};
 
 use super::UnitEntry;
 
@@ -19,6 +23,7 @@ pub(crate) struct StateMap {
 }
 pub(crate) enum Action {
     Set(State),
+    Get(oneshot::Sender<Option<State>>),
 }
 pub(crate) struct Message(UnitEntry, Action);
 
@@ -35,12 +40,11 @@ impl StateMap {
                 let entry = msg.0;
                 match msg.1 {
                     Action::Set(new_state) => {
-                        if let Some(state) = self.map.get_mut(&entry) {
-                            *state = new_state;
-                        } else {
-                            todo!("handle missing unit")
-                        }
+                        self.map.insert(entry, new_state);
                     }
+                    Action::Get(s) => self.map.get(&entry).copied().pipe(|state| {
+                        s.send(state).ok();
+                    }),
                 }
             }
         })

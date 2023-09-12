@@ -1,36 +1,41 @@
-use std::path::Path;
+use rustix::fs::MountFlags;
+use tokio::sync::mpsc::Sender;
 
-use rustix::fs::{mount, unmount, MountFlags, UnmountFlags};
-
-use super::{UnitCommonImpl, UnitDeps, UnitEntry, UnitImpl};
+use super::{UnitCommonImpl, UnitDeps, UnitImpl};
 use crate::{
-    fstab::FsEntry,
+    fstab::{FsEntry, MountInfo},
     unit::{Unit, UnitKind},
+    util::{
+        job::{self, create_blocking_job},
+        mount::mount,
+    },
     Rc,
 };
 
-#[derive(Debug)]
-pub struct Impl {
-    what: Rc<Path>,
-    where_: Rc<Path>,
-    type_: Rc<str>,
-    options: Rc<str>,
-}
+// #[derive(Debug, Clone)]
+// pub struct Impl {
+//     inner: Rc<ImplInner>,
+// }
+//
+// #[derive(Debug)]
+// struct ImplInner {
+//     what: Box<Path>,
+//     where_: Box<Path>,
+//     type_: Box<str>,
+//     options: Box<str>,
+// }
+
+pub(crate) type Impl = Rc<MountInfo>;
 
 impl From<FsEntry> for Impl {
     fn from(value: FsEntry) -> Self {
-        Self {
-            what: value.fs_spec,
-            where_: value.mount_point,
-            type_: value.vfs_type,
-            options: value.mount_options,
-        }
+        value.mount_info.clone()
     }
 }
 
 impl From<Impl> for UnitImpl<Impl> {
     fn from(value: Impl) -> Self {
-        let name = value.where_.to_str().unwrap();
+        let name = value.mount_point.to_str().unwrap();
         let name = (if let Some(s) = name.strip_prefix('/') {
             if s.is_empty() {
                 String::from('-')
@@ -75,31 +80,30 @@ impl Unit for UnitImpl<Impl> {
         UnitKind::Mount
     }
 
-    fn start(&mut self) {
+    fn start(&self, job_manager: &Sender<job::Message>) {
         let Self {
             common: _,
-            sub: kind,
+            sub: mount_info,
         } = self;
-        mount(
-            kind.what.as_ref(),
-            kind.where_.as_ref(),
-            kind.type_.as_ref(),
-            MountFlags::empty(),
-            kind.options.as_ref(),
-        );
+        let mount_info = mount_info.clone();
+        create_blocking_job(
+            job_manager.clone(),
+            Box::new(move || {
+                mount(mount_info, MountFlags::empty());
+            }),
+        )
     }
 
-    fn stop(&mut self) {
+    fn stop(&self) {
         let Self {
             common: _,
-            sub: kind,
+            sub: mount_info,
         } = self;
-        unmount(kind.where_.as_ref(), UnmountFlags::empty());
+        // unmount(kind.mount_point.as_ref(), UnmountFlags::empty());
     }
 
-    fn restart(&mut self) {
-        self.stop();
-        self.start();
+    fn restart(&self) {
+        todo!()
     }
 
     fn deps(&self) -> UnitDeps {

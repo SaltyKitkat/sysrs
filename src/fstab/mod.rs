@@ -7,12 +7,17 @@ use std::{
 use tokio::io::{AsyncBufRead, AsyncBufReadExt};
 use tokio_stream::wrappers::LinesStream;
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct MountInfo {
+    pub(crate) fs_spec: Box<Path>,
+    pub(crate) mount_point: Box<Path>,
+    pub(crate) vfs_type: Box<str>,
+    pub(crate) mount_options: Box<str>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FsEntry {
-    pub fs_spec: Rc<Path>,
-    pub mount_point: Rc<Path>,
-    pub vfs_type: Rc<str>,
-    pub mount_options: Rc<str>,
+pub(crate) struct FsEntry {
+    pub mount_info: Rc<MountInfo>,
     pub dump: bool,
     pub fsck_order: u8,
 }
@@ -68,9 +73,9 @@ impl TryFrom<&[&str; 4]> for FsEntry {
             fs_spec.to_owned()
         }
         .into();
-        let fs_spec: Rc<Path> = fs_spec.into();
+        let fs_spec = fs_spec.into();
 
-        let mount_point: Rc<Path> = PathBuf::from(value[1]).into();
+        let mount_point = PathBuf::from(value[1]).into();
 
         // check path absolute
         // consider `tmpfs`
@@ -82,11 +87,15 @@ impl TryFrom<&[&str; 4]> for FsEntry {
         //     return Err(Error::PathNotAbsolute(mount_point));
         // }
 
-        Ok(Self {
+        let mount_info = Rc::new(MountInfo {
             fs_spec,
             mount_point,
             vfs_type: value[2].into(),
             mount_options: value[3].into(),
+        });
+
+        Ok(Self {
+            mount_info,
             dump: false,
             fsck_order: 0,
         })

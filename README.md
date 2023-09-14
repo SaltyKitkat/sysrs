@@ -15,18 +15,20 @@
   struct Message { ... }
   struct Actor { ... }
   impl Actor {
-    fn new() -> Self
-    fn run(self, mut rx: Receiver<Message>) -> JoinHandle<()> {
+    pub fn new() -> Self
+    pub fn run(self, mut rx: Receiver<Message>) -> JoinHandle<()> {
       tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
-          // logic ...
+          self.serve(msg);
         }
       })
     }
+    fn serve(&mut self, msg: Message) {
+      // logic
+    }
   }
   ```
-  需要注意的是，如果需要在逻辑代码部分向其他Actor发送消息，则需要单独spawn出一个任务进行无阻塞的发送，以防止发送消息时发生等待，导致循环引用的actors发生死锁
-  （或使用unnounded channels,也可以解决这一问题，但可能造成内存占用不受控膨胀且难以排查）
+  需要注意的是，serve内部的逻辑应当是无阻塞的，以确保actor能够及时处理消息。对于需要同步/异步阻塞的部分，需要spawn出去一个任务单独执行。
 
 - 配置文件读取：得到impl Unit，并填充足够信息（依赖，start,stop等等）
   配置文件解析器：`File -> impl Unit`

@@ -26,19 +26,23 @@ impl Monitor {
     pub(super) fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                match msg {
-                    Message::Event(pid, status) => {
-                        if let Some(handler) = self.map.remove(&pid) {
-                            handler.handle(pid, status)
-                        } else {
-                            todo!()
-                        }
-                    }
-                    Message::Register(pid, handler) => {
-                        self.map.insert(pid, handler);
-                    }
-                }
+                self.serve(msg);
             }
         })
+    }
+
+    fn serve(&mut self, msg: Message) {
+        match msg {
+            Message::Event(pid, status) => {
+                if let Some(handler) = self.map.remove(&pid) {
+                    handler.handle(pid, status)
+                } else {
+                    todo!()
+                }
+            }
+            Message::Register(pid, handler) => {
+                self.map.insert(pid, handler);
+            }
+        }
     }
 }

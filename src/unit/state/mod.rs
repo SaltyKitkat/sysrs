@@ -44,36 +44,40 @@ impl StateManager {
     pub(crate) fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
         tokio::task::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                let entry = msg.0;
-                match msg.1 {
-                    Action::Set(new_state) => {
-                        self.trigger_monitors(&entry, new_state);
-                        self.state.insert(entry, new_state);
-                    }
-                    Action::Get(s) => {
-                        if let Some(&state) = self.state.get(&entry) {
-                            s.send(state).ok();
-                        }
-                    }
-                    Action::SetWithCondition { target, condition } => {
-                        if let Entry::Occupied(mut e) = self.state.entry(entry.clone()) {
-                            if condition(e.get().clone()) {
-                                *e.get_mut() = target;
-                                self.trigger_monitors(&entry, target);
-                            }
-                        }
-                    }
-                    Action::Monitor(s) => match self.monitor.entry(entry) {
-                        Entry::Occupied(mut o) => {
-                            o.get_mut().push(s);
-                        }
-                        Entry::Vacant(v) => {
-                            v.insert(vec![s]);
-                        }
-                    },
-                }
+                self.serve(msg);
             }
         })
+    }
+
+    fn serve(&mut self, msg: Message) {
+        let entry = msg.0;
+        match msg.1 {
+            Action::Set(new_state) => {
+                self.trigger_monitors(&entry, new_state);
+                self.state.insert(entry, new_state);
+            }
+            Action::Get(s) => {
+                if let Some(&state) = self.state.get(&entry) {
+                    s.send(state).ok();
+                }
+            }
+            Action::SetWithCondition { target, condition } => {
+                if let Entry::Occupied(mut e) = self.state.entry(entry.clone()) {
+                    if condition(e.get().clone()) {
+                        *e.get_mut() = target;
+                        self.trigger_monitors(&entry, target);
+                    }
+                }
+            }
+            Action::Monitor(s) => match self.monitor.entry(entry) {
+                Entry::Occupied(mut o) => {
+                    o.get_mut().push(s);
+                }
+                Entry::Vacant(v) => {
+                    v.insert(vec![s]);
+                }
+            },
+        }
     }
 
     fn trigger_monitors(&mut self, entry: &UnitEntry, new_state: State) {

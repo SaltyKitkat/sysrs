@@ -3,7 +3,9 @@ use tokio::sync::mpsc::Sender;
 use super::{Unit, UnitDeps, UnitImpl, UnitKind};
 use crate::{util::job, Rc};
 
-#[derive(Clone, Copy, Debug)]
+pub(crate) mod test;
+
+#[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
 pub(crate) enum Kind {
     Simple,
     Forking,

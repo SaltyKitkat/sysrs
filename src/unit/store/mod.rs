@@ -50,18 +50,22 @@ impl UnitStore {
     pub(crate) fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
         tokio::task::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                let entry = msg.0;
-                match msg.1 {
-                    Action::Update(unit) => self.insert(entry, unit),
-                    Action::Remove => {
-                        self.map.remove(&entry);
-                    }
-                    Action::Start => self._start(entry),
-                    Action::Stop => todo!(),
-                    Action::Restart => todo!(),
-                }
+                self.serve(msg);
             }
         })
+    }
+
+    fn serve(&mut self, msg: Message) {
+        let entry = msg.0;
+        match msg.1 {
+            Action::Update(unit) => self.insert(entry, unit),
+            Action::Remove => {
+                self.map.remove(&entry);
+            }
+            Action::Start => todo!(),
+            Action::Stop => todo!(),
+            Action::Restart => todo!(),
+        }
     }
 
     /// start a unit with its deps
@@ -75,7 +79,7 @@ impl UnitStore {
                 wants,
                 after,
                 before,
-                confilcts,
+                conflicts,
             } = deps.as_ref();
 
             // currently we just start all the things we need, wait them started and then start this unit.
@@ -201,6 +205,19 @@ impl UnitStore {
     fn clear(&mut self) {
         self.map.clear()
     }
+}
+
+pub(crate) async fn update_unit(store: &Sender<Message>, unit: impl Unit + Send + Sync + 'static) {
+    let entry = UnitEntry::from(&unit);
+    store
+        .send(Message(entry, Action::Update(Rc::new(unit))))
+        .await
+        .unwrap();
+}
+
+pub(crate) async fn start_unit(store: &Sender<Message>, entry: UnitEntry) -> Result<State, State> {
+    store.send(Message(entry, Action::Start)).await.unwrap();
+    todo!()
 }
 
 // pub struct DepMgr {

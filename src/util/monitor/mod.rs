@@ -20,23 +20,27 @@ impl Monitor {
         Self { process }
     }
 
-    pub(crate) fn run(self, mut rx: Receiver<Message>) -> JoinHandle<()> {
+    pub(crate) fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                match msg {
-                    Message::Process((pid, status)) => {
-                        let process = self.process.clone();
-                        // spawn a task to send msg
-                        // prevent loop msg send lead to dead lock
-                        tokio::spawn(async move {
-                            process
-                                .send(process::Message::Event(pid, status))
-                                .await
-                                .unwrap()
-                        });
-                    }
-                }
+                self.serve(msg);
             }
         })
+    }
+
+    fn serve(&mut self, msg: Message) {
+        match msg {
+            Message::Process((pid, status)) => {
+                let process = self.process.clone();
+                // spawn a task to send msg
+                // prevent loop msg send lead to dead lock
+                tokio::spawn(async move {
+                    process
+                        .send(process::Message::Event(pid, status))
+                        .await
+                        .unwrap()
+                });
+            }
+        }
     }
 }

@@ -1,0 +1,5 @@
+name = "t0.service"
+kind = "Oneshot"
+start = "echo start t0.service"
+stop = "echo stop t0.service"
+restart = "echo restart t0.service"

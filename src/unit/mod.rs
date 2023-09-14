@@ -39,13 +39,13 @@ pub(crate) struct UnitCommonImpl {
     deps: Rc<UnitDeps>, // todo
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct UnitDeps {
     requires: Box<[UnitEntry]>,
     wants: Box<[UnitEntry]>,
     after: Box<[UnitEntry]>,
     before: Box<[UnitEntry]>,
-    confilcts: Box<[UnitEntry]>,
+    conflicts: Box<[UnitEntry]>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]

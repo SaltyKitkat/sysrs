@@ -73,14 +73,14 @@ async fn async_main() {
 }
 
 pub(crate) struct Actors {
-    store: Sender<unit::store::Message>,
-    state: Sender<unit::state::Message>,
-    monitor: Sender<util::monitor::Message>,
-    job: Sender<util::job::Message>,
+    pub(crate) store: Sender<unit::store::Message>,
+    pub(crate) state: Sender<unit::state::Message>,
+    pub(crate) monitor: Sender<util::monitor::Message>,
+    pub(crate) job: Sender<util::job::Message>,
 }
 
 impl Actors {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         const CHANNEL_LEN: usize = 4;
 
         let (store, store_rx) = channel(CHANNEL_LEN);

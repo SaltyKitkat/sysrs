@@ -4,7 +4,7 @@ use super::{Unit, UnitDeps, UnitImpl, UnitKind};
 use crate::{util::job, Rc};
 
 #[derive(Clone, Copy, Debug)]
-pub enum Kind {
+pub(crate) enum Kind {
     Simple,
     Forking,
     Oneshot,
@@ -12,7 +12,7 @@ pub enum Kind {
 }
 
 #[derive(Debug)]
-pub struct Impl {
+pub(crate) struct Impl {
     kind: Kind,
     exec_start: Rc<str>,
     exec_stop: Rc<str>,
@@ -47,14 +47,18 @@ impl Unit for UnitImpl<Impl> {
         UnitKind::Service
     }
 
-    fn deps(&self) -> UnitDeps {
-        todo!()
+    fn deps(&self) -> Rc<UnitDeps> {
+        self.common.deps.clone()
     }
 
     fn start(&self, job_manager: Sender<job::Message>) {
-        // todo: check state and set state: starting (CAS)
-        // should impl in UnitStore, not in Unit::start
         // todo: send job to job manager and let it to set state due to job status
+        match self.sub.kind {
+            Kind::Simple => todo!(),
+            Kind::Forking => todo!(),
+            Kind::Oneshot => todo!(),
+            Kind::Notify => todo!(),
+        }
     }
 
     fn stop(&self, job_manager: Sender<job::Message>) {

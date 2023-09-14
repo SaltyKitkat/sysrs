@@ -969,6 +969,7 @@ dependencies = [
 name = "sysrs"
 version = "0.1.0"
 dependencies = [
+ "async-recursion",
  "cgroups",
  "futures",
  "rustix 0.38.11",

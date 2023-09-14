@@ -6,7 +6,7 @@ use tokio::{
     sync::mpsc::{channel, Sender},
     time::sleep,
 };
-use unit::state::StateMap;
+use unit::state::StateManager;
 use util::monitor::Monitor;
 
 use crate::{
@@ -88,10 +88,10 @@ impl Actors {
         let (monitor, monitor_rx) = channel(CHANNEL_LEN);
         let (job, job_rx) = channel(CHANNEL_LEN);
 
-        UnitStore::new().run(store_rx);
-        StateMap::new().run(state_rx);
+        UnitStore::new(job.clone(), state.clone()).run(store_rx);
+        StateManager::new().run(state_rx);
         Monitor::new().run(monitor_rx);
-        JobManager::new(state.clone(), monitor.clone()).run(job_rx);
+        JobManager::new(store.clone(), state.clone(), monitor.clone()).run(job_rx);
 
         Self {
             store,

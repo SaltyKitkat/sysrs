@@ -32,21 +32,20 @@ impl Display for UnitKind {
 }
 
 #[derive(Debug)]
-pub struct UnitCommonImpl {
+pub(crate) struct UnitCommonImpl {
     name: Rc<str>,
     description: Rc<str>,
     documentation: Rc<str>,
-    deps: UnitDeps, // todo
+    deps: Rc<UnitDeps>, // todo
 }
 
-#[derive(Default, Debug, Clone)]
-pub struct UnitDeps {
-    requires: Vec<UnitEntry>,
-    // required_by: Vec<UnitEntry>,
-    // wants: (),
-    // after: (),
-    // before: (),
-    // confilcts: (),
+#[derive(Debug)]
+pub(crate) struct UnitDeps {
+    requires: Box<[UnitEntry]>,
+    wants: Box<[UnitEntry]>,
+    after: Box<[UnitEntry]>,
+    before: Box<[UnitEntry]>,
+    confilcts: Box<[UnitEntry]>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -66,7 +65,7 @@ pub(crate) trait Unit: Debug {
     fn documentation(&self) -> Rc<str>;
     fn kind(&self) -> UnitKind;
 
-    fn deps(&self) -> UnitDeps;
+    fn deps(&self) -> Rc<UnitDeps>;
 
     fn start(&self, job_manager: Sender<job::Message>);
     fn stop(&self, job_manager: Sender<job::Message>);
@@ -79,8 +78,8 @@ pub(crate) struct UnitImpl<KindImpl> {
     pub sub: KindImpl,
 }
 
-impl From<&dyn Unit> for UnitEntry {
-    fn from(value: &dyn Unit) -> Self {
+impl<T: Unit> From<&T> for UnitEntry {
+    fn from(value: &T) -> Self {
         Self {
             name: value.name().clone(),
         }

@@ -1,8 +1,11 @@
-use rustix::fs::{mount as _mount, unmount as _unmount, MountFlags, UnmountFlags};
+use rustix::{
+    fs::{mount as _mount, unmount as _unmount, MountFlags, UnmountFlags},
+    io,
+};
 
 use crate::{fstab::MountInfo, Rc};
 
-pub(crate) fn mount(mount_info: Rc<MountInfo>, flags: MountFlags) {
+pub(crate) fn mount(mount_info: Rc<MountInfo>, flags: MountFlags) -> io::Result<()> {
     let MountInfo {
         fs_spec: source,
         mount_point: target,
@@ -15,10 +18,10 @@ pub(crate) fn mount(mount_info: Rc<MountInfo>, flags: MountFlags) {
         vfs_type.as_ref(),
         flags,
         data.as_ref(),
-    );
+    )
 }
 
-pub(crate) fn unmount(mount_info: Rc<MountInfo>, flags: UnmountFlags) {
+pub(crate) fn unmount(mount_info: Rc<MountInfo>, flags: UnmountFlags) -> io::Result<()> {
     let MountInfo { mount_point, .. } = mount_info.as_ref();
-    _unmount(mount_point.as_ref(), flags);
+    _unmount(mount_point.as_ref(), flags)
 }

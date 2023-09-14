@@ -1,15 +1,28 @@
-use std::collections::{hash_map::Entry, HashMap, VecDeque};
+use std::collections::{hash_map::Entry, HashMap};
 
+use async_recursion::async_recursion;
+use futures::stream::FuturesUnordered;
 use tap::Tap;
-use tokio::{sync::mpsc::Receiver, task::JoinHandle};
+use tokio::{
+    sync::mpsc::{Receiver, Sender},
+    task::JoinHandle,
+};
+use tokio_stream::StreamExt;
 
-use super::{Unit, UnitDeps, UnitEntry};
+use super::{state, Unit, UnitDeps, UnitEntry};
+use crate::{
+    unit::state::{register_state_monitor, set_state_with_condition, State},
+    util::job,
+    Rc,
+};
 
-type Item = Box<dyn Unit + Send>;
+type Item = Rc<dyn Unit + Send + Sync + 'static>;
 
 #[derive(Debug)]
 pub(crate) struct UnitStore {
     map: HashMap<UnitEntry, Item>, // info in unit files
+    job_manager: Sender<job::Message>,
+    state_manager: Sender<state::Message>,
 }
 
 pub(crate) enum Action {
@@ -23,9 +36,14 @@ pub(crate) enum Action {
 pub(crate) struct Message(UnitEntry, Action);
 
 impl UnitStore {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(
+        job_manager: Sender<job::Message>,
+        state_manager: Sender<state::Message>,
+    ) -> Self {
         Self {
             map: HashMap::new(),
+            job_manager,
+            state_manager,
         }
     }
 
@@ -38,13 +56,7 @@ impl UnitStore {
                     Action::Remove => {
                         self.map.remove(&entry);
                     }
-                    Action::Start => {
-                        if let Some(unit) = self.get(&entry) {
-                            todo!("start a unit")
-                        } else {
-                            todo!("handle missing unit")
-                        }
-                    }
+                    Action::Start => self._start(entry),
                     Action::Stop => todo!(),
                     Action::Restart => todo!(),
                 }
@@ -52,7 +64,126 @@ impl UnitStore {
         })
     }
 
-    fn start(&self, entry: UnitEntry) {
+    /// start a unit with its deps
+    /// spawn a start job and set unit state to starting
+    #[async_recursion]
+    async fn start(&self, entry: UnitEntry) {
+        if let Some(unit) = self.map.get(&entry) {
+            let deps = unit.deps();
+            let UnitDeps {
+                requires,
+                wants,
+                after,
+                before,
+                confilcts,
+            } = deps.as_ref();
+
+            // currently we just start all the things we need, wait them started and then start this unit.
+            // todo: more detailed way:
+            // start requires
+            // let requires_fut: FuturesUnordered<_> = requires
+            //     .iter()
+            //     .map(|entry| self.start(entry.clone()))
+            //     .collect();
+            // start wants
+            // stop conflicts
+            // wait conflicts stop
+            // wait afters
+            // notify befores
+
+            // requires
+            let mut requires_fut: FuturesUnordered<_> = requires
+                .iter()
+                .cloned()
+                .map(|e| {
+                    let fut = async {
+                        self.start(e.clone()).await;
+                        register_state_monitor(&self.state_manager, e)
+                            .await
+                            .await
+                            .unwrap()
+                    };
+                    fut
+                })
+                .collect();
+            if !requires_fut.all(|state| state == State::Running).await {
+                todo!("handle dep failure");
+            }
+
+            // after
+            let mut after_fut: FuturesUnordered<_> = after
+                .iter()
+                .cloned()
+                .map(|e| {
+                    let fut = async {
+                        self.start(e.clone()).await;
+                        register_state_monitor(&self.state_manager, e)
+                            .await
+                            .await
+                            .unwrap()
+                    };
+                    fut
+                })
+                .collect();
+            if !after_fut.all(|state| state == State::Running).await {
+                todo!("handle dep failure");
+            }
+
+            // wants
+            let mut wants_fut: FuturesUnordered<_> = wants
+                .iter()
+                .cloned()
+                .map(|e| {
+                    let fut = async {
+                        self.start(e.clone()).await;
+                        register_state_monitor(&self.state_manager, e)
+                            .await
+                            .await
+                            .unwrap()
+                    };
+                    fut
+                })
+                .collect();
+            if !wants_fut.all(|state| state == State::Running).await {
+                todo!("handle dep failure");
+            }
+
+            // confilcts
+            // todo!();
+
+            //  start self
+            self._start(entry);
+        }
+        todo!()
+    }
+    /// start a single unit
+    fn _start(&self, entry: UnitEntry) {
+        if let Some(unit) = self.map.get(&entry) {
+            let unit = unit.clone();
+            let job_manager = self.job_manager.clone();
+            let state_manager = self.state_manager.clone();
+            // todo: start deps
+            tokio::spawn(async move {
+                // check previous state and set state to starting
+                if let Some(s) =
+                    set_state_with_condition(&state_manager, entry, State::Starting, |s| {
+                        s == State::Stopped || s == State::Failed
+                    })
+                    .await
+                {
+                    match s {
+                        Ok(s) => {
+                            unit.start(job_manager);
+                        }
+                        Err(s) => todo!("handle error"),
+                    }
+                };
+                todo!("start a unit")
+            });
+        } else {
+            todo!("handle missing unit")
+        }
+
         // query unit state
         // get deps
         // start(self, deps)
@@ -67,72 +198,68 @@ impl UnitStore {
         };
     }
 
-    fn get(&self, entry: &UnitEntry) -> Option<&(dyn Unit + Send)> {
-        self.map.get(entry).map(AsRef::as_ref)
-    }
-
     fn clear(&mut self) {
         self.map.clear()
     }
 }
 
-pub struct DepMgr {
-    map: HashMap<UnitEntry, UnitDeps>,
-}
-
-impl DepMgr {
-    pub fn new() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
-    }
-
-    // pub fn insert(&mut self, unit: &dyn Unit) {
-    //     let entry: UnitEntry = unit.into();
-    //     let UnitDeps {
-    //         requires,
-    //         required_by,
-    //     } = unit.deps().clone();
-    //     for unit in &required_by {
-    //         self.map
-    //             .entry(unit.clone())
-    //             .or_default()
-    //             .requires
-    //             .push(entry.clone());
-    //     }
-    //     match self.map.entry(entry) {
-    //         Entry::Occupied(o) => o.into_mut().requires.extend(requires),
-    //         Entry::Vacant(v) => {
-    //             v.insert(UnitDeps {
-    //                 requires,
-    //                 required_by,
-    //             });
-    //         }
-    //     }
-    // }
-
-    pub(crate) fn do_with_deps(
-        &self,
-        unit: UnitEntry,
-        mut action: impl FnMut(&UnitEntry),
-        mut condition: impl FnMut(&UnitEntry) -> bool,
-    ) {
-        if !condition(&unit) {
-            return;
-        }
-        let mut stack = Vec::new();
-        let mut queue = VecDeque::new();
-        queue.push_back(unit);
-        while let Some(current) = queue.pop_front() {
-            if let Some(unit) = self.map.get(&current) {
-                queue.extend(unit.requires.iter().filter(|u| condition(u)).cloned());
-            }
-            if !stack.contains(&current) {
-                stack.push(current);
-            }
-        }
-        for unit in stack {
-            action(&unit);
-        }
-    }
-}
+// pub struct DepMgr {
+//     map: HashMap<UnitEntry, UnitDeps>,
+// }
+//
+// impl DepMgr {
+//     pub fn new() -> Self {
+//         Self {
+//             map: HashMap::new(),
+//         }
+//     }
+//
+//     // pub fn insert(&mut self, unit: &dyn Unit) {
+//     //     let entry: UnitEntry = unit.into();
+//     //     let UnitDeps {
+//     //         requires,
+//     //         required_by,
+//     //     } = unit.deps().clone();
+//     //     for unit in &required_by {
+//     //         self.map
+//     //             .entry(unit.clone())
+//     //             .or_default()
+//     //             .requires
+//     //             .push(entry.clone());
+//     //     }
+//     //     match self.map.entry(entry) {
+//     //         Entry::Occupied(o) => o.into_mut().requires.extend(requires),
+//     //         Entry::Vacant(v) => {
+//     //             v.insert(UnitDeps {
+//     //                 requires,
+//     //                 required_by,
+//     //             });
+//     //         }
+//     //     }
+//     // }
+//
+//     pub(crate) fn do_with_deps(
+//         &self,
+//         unit: UnitEntry,
+//         mut action: impl FnMut(&UnitEntry),
+//         mut condition: impl FnMut(&UnitEntry) -> bool,
+//     ) {
+//         if !condition(&unit) {
+//             return;
+//         }
+//         let mut stack = Vec::new();
+//         let mut queue = VecDeque::new();
+//         queue.push_back(unit);
+//         while let Some(current) = queue.pop_front() {
+//             if let Some(unit) = self.map.get(&current) {
+//                 queue.extend(unit.requires.iter().filter(|u| condition(u)).cloned());
+//             }
+//             if !stack.contains(&current) {
+//                 stack.push(current);
+//             }
+//         }
+//         for unit in stack {
+//             action(&unit);
+//         }
+//     }
+// }

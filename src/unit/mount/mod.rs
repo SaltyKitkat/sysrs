@@ -1,7 +1,7 @@
 use rustix::fs::{MountFlags, UnmountFlags};
 use tokio::sync::mpsc::Sender;
 
-use super::{UnitCommonImpl, UnitDeps, UnitImpl};
+use super::{state::State, UnitCommonImpl, UnitDeps, UnitImpl};
 use crate::{
     fstab::{FsEntry, MountInfo},
     unit::{Unit, UnitKind},
@@ -50,7 +50,7 @@ impl From<Impl> for UnitImpl<Impl> {
             name,
             description: String::new().into(),
             documentation: String::new().into(),
-            deps: Default::default(),
+            deps: todo!(),
         };
         Self { common, sub: value }
     }
@@ -86,12 +86,18 @@ impl Unit for UnitImpl<Impl> {
             sub: mount_info,
         } = self;
         let mount_info = mount_info.clone();
-        create_blocking_job(
-            job_manager.clone(),
-            Box::new(move || {
-                mount(mount_info, MountFlags::empty());
-            }),
-        )
+        let entry = self.into();
+        tokio::spawn(async move {
+            create_blocking_job(
+                &job_manager,
+                entry,
+                Box::new(move || match mount(mount_info, MountFlags::empty()) {
+                    Ok(_) => State::Running,
+                    Err(_) => State::Failed,
+                }),
+            )
+            .await
+        });
     }
 
     fn stop(&self, job_manager: Sender<job::Message>) {
@@ -100,23 +106,25 @@ impl Unit for UnitImpl<Impl> {
             sub: mount_info,
         } = self;
         let mount_info = mount_info.clone();
-        create_blocking_job(
-            job_manager.clone(),
-            Box::new(move || {
-                unmount(mount_info, UnmountFlags::empty());
-            }),
-        )
-        // unmount(kind.mount_point.as_ref(), UnmountFlags::empty());
+        let entry = self.into();
+        tokio::spawn(async move {
+            create_blocking_job(
+                &job_manager,
+                entry,
+                Box::new(move || match unmount(mount_info, UnmountFlags::empty()) {
+                    Ok(_) => State::Running,
+                    Err(_) => State::Failed,
+                }),
+            )
+            .await
+        });
     }
 
     fn restart(&self, job_manager: Sender<job::Message>) {
         todo!()
     }
 
-    fn deps(&self) -> UnitDeps {
-        UnitDeps {
-            requires: vec![],
-            // required_by: vec![UnitEntry::from("local-fs.target")],
-        }
+    fn deps(&self) -> Rc<UnitDeps> {
+        todo!()
     }
 }

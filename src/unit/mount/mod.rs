@@ -1,14 +1,15 @@
+use async_trait::async_trait;
 use rustix::fs::{MountFlags, UnmountFlags};
 use tokio::sync::mpsc::Sender;
 
-use super::{state::State, UnitCommonImpl, UnitDeps, UnitImpl};
+use super::{
+    state::{self, set_state_with_condition, State},
+    UnitCommonImpl, UnitDeps, UnitEntry, UnitImpl,
+};
 use crate::{
     fstab::{FsEntry, MountInfo},
     unit::{Unit, UnitKind},
-    util::{
-        job::{self, create_blocking_job},
-        mount::{mount, unmount},
-    },
+    util::mount::{mount, unmount},
     Rc,
 };
 
@@ -63,6 +64,7 @@ impl From<FsEntry> for UnitImpl<Impl> {
     }
 }
 
+#[async_trait]
 impl Unit for UnitImpl<Impl> {
     fn name(&self) -> Rc<str> {
         Rc::clone(&self.common.name)
@@ -80,47 +82,67 @@ impl Unit for UnitImpl<Impl> {
         UnitKind::Mount
     }
 
-    fn start(&self, job_manager: Sender<job::Message>) {
+    async fn start(&self, state_manager: Sender<state::Message>) {
+        let Self {
+            common: _,
+            sub: mount_info,
+        } = self;
+        let mount_info = mount_info.clone();
+        let entry = UnitEntry::from(self);
+        match set_state_with_condition(&state_manager, entry.clone(), State::Starting, |s| {
+            s.is_inactive()
+        })
+        .await
+        {
+            Ok(_) => (),
+            Err(_) => todo!(),
+        }
+        let new_state = match tokio::task::block_in_place(|| mount(mount_info, MountFlags::empty()))
+        {
+            Ok(_) => State::Active,
+            Err(_) => State::Failed,
+        };
+        match set_state_with_condition(&state_manager, entry, new_state, |s| s == State::Starting)
+            .await
+        {
+            Ok(_) => (),
+            Err(_) => todo!(),
+        }
+    }
+
+    async fn stop(&self, state_manager: Sender<state::Message>) {
         let Self {
             common: _,
             sub: mount_info,
         } = self;
         let mount_info = mount_info.clone();
         let entry = self.into();
-        tokio::spawn(async move {
-            create_blocking_job(
-                &job_manager,
-                entry,
-                Box::new(move || match mount(mount_info, MountFlags::empty()) {
-                    Ok(_) => State::Running,
-                    Err(_) => State::Failed,
-                }),
-            )
+        match set_state_with_condition(
+            &state_manager,
+            UnitEntry::from(self),
+            State::Stopping,
+            |s| s.is_active(),
+        )
+        .await
+        {
+            Ok(_) => (),
+            Err(_) => todo!(),
+        }
+
+        let new_state =
+            match tokio::task::block_in_place(|| unmount(mount_info, UnmountFlags::empty())) {
+                Ok(_) => State::Stopped,
+                Err(_) => State::Failed,
+            };
+        match set_state_with_condition(&state_manager, entry, new_state, |s| s == State::Starting)
             .await
-        });
+        {
+            Ok(_) => (),
+            Err(_) => todo!(),
+        }
     }
 
-    fn stop(&self, job_manager: Sender<job::Message>) {
-        let Self {
-            common: _,
-            sub: mount_info,
-        } = self;
-        let mount_info = mount_info.clone();
-        let entry = self.into();
-        tokio::spawn(async move {
-            create_blocking_job(
-                &job_manager,
-                entry,
-                Box::new(move || match unmount(mount_info, UnmountFlags::empty()) {
-                    Ok(_) => State::Running,
-                    Err(_) => State::Failed,
-                }),
-            )
-            .await
-        });
-    }
-
-    fn restart(&self, job_manager: Sender<job::Message>) {
+    async fn restart(&self, state_mstate_manager: Sender<state::Message>) {
         todo!()
     }
 

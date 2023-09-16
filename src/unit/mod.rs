@@ -1,8 +1,9 @@
 use std::fmt::{Debug, Display};
 
+use async_trait::async_trait;
 use tokio::sync::mpsc::Sender;
 
-use crate::{util::job, Rc};
+use crate::Rc;
 
 pub(crate) mod mount;
 pub(crate) mod service;
@@ -52,6 +53,11 @@ pub(crate) struct UnitDeps {
 pub(crate) struct UnitEntry {
     name: Rc<str>,
 }
+impl Display for UnitEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
 
 impl From<&str> for UnitEntry {
     fn from(value: &str) -> Self {
@@ -59,6 +65,7 @@ impl From<&str> for UnitEntry {
     }
 }
 
+#[async_trait]
 pub(crate) trait Unit: Debug {
     fn name(&self) -> Rc<str>;
     fn description(&self) -> Rc<str>;
@@ -67,9 +74,9 @@ pub(crate) trait Unit: Debug {
 
     fn deps(&self) -> Rc<UnitDeps>;
 
-    fn start(&self, job_manager: Sender<job::Message>);
-    fn stop(&self, job_manager: Sender<job::Message>);
-    fn restart(&self, job_manager: Sender<job::Message>);
+    async fn start(&self, state_manager: Sender<state::Message>);
+    async fn stop(&self, state_manager: Sender<state::Message>);
+    async fn restart(&self, state_manager: Sender<state::Message>);
 }
 
 #[derive(Debug)]

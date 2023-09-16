@@ -1,17 +1,19 @@
+use std::time::Duration;
+
 use rustix::process;
-use std::{path::PathBuf, time::Duration};
 use tokio::{
-    fs::OpenOptions,
-    io::BufReader,
     sync::mpsc::{channel, Sender},
     time::sleep,
 };
 use unit::state::StateManager;
-use util::monitor::Monitor;
 
 use crate::{
-    unit::store::UnitStore,
-    util::{event::signal::register_sig_handlers, job::JobManager},
+    unit::{
+        service::{Impl, Service},
+        store::{start_unit, update_unit, UnitStore},
+        UnitEntry, UnitImpl,
+    },
+    util::event::register_sig_handlers,
 };
 
 // type Rc<T> = std::rc::Rc<T>;
@@ -44,9 +46,9 @@ async fn async_main() {
     println!("tokio started!");
     let actors = Actors::new();
     register_sig_handlers(&actors);
-    println!("parsing fstab:");
-    let path = PathBuf::from("/etc/fstab");
-    let file = BufReader::new(OpenOptions::new().read(true).open(&path).await.unwrap());
+    // println!("parsing fstab:");
+    // let path = PathBuf::from("/etc/fstab");
+    // let file = BufReader::new(OpenOptions::new().read(true).open(&path).await.unwrap());
     // fstab::FsEntry::from_buf_reader(file)
     //     .map(|fs| -> Box<UnitImpl<MountImpl>> { Box::new(fs.into()) })
     //     .for_each(|mount| {
@@ -68,15 +70,28 @@ async fn async_main() {
     //         exec_restart: "echo restart".into(),
     //     },
     // };
-    sleep(Duration::from_secs(3)).await;
+
+    let t0 = include_str!("unit/service/t0.service");
+    let t0: Service = toml::from_str(t0).unwrap();
+    dbg!(&t0);
+    let t0: UnitImpl<Impl> = t0.into();
+    dbg!(&t0);
+    let entry = UnitEntry::from(&t0);
+    let actors = Actors::new();
+    println!("before insert unit");
+    update_unit(&actors.store, t0).await;
+    println!("after insert unit");
+    println!("before start unit");
+    start_unit(&actors.store, entry.clone()).await;
+    println!("after start unit");
+    sleep(Duration::from_secs(1)).await;
+    start_unit(&actors.store, entry).await;
     println!("tokio finished!");
 }
 
 pub(crate) struct Actors {
     pub(crate) store: Sender<unit::store::Message>,
     pub(crate) state: Sender<unit::state::Message>,
-    pub(crate) monitor: Sender<util::monitor::Message>,
-    pub(crate) job: Sender<util::job::Message>,
 }
 
 impl Actors {
@@ -85,19 +100,10 @@ impl Actors {
 
         let (store, store_rx) = channel(CHANNEL_LEN);
         let (state, state_rx) = channel(CHANNEL_LEN);
-        let (monitor, monitor_rx) = channel(CHANNEL_LEN);
-        let (job, job_rx) = channel(CHANNEL_LEN);
 
-        UnitStore::new(job.clone(), state.clone()).run(store_rx);
+        UnitStore::new(state.clone()).run(store_rx);
         StateManager::new().run(state_rx);
-        Monitor::new().run(monitor_rx);
-        JobManager::new(store.clone(), state.clone(), monitor.clone()).run(job_rx);
 
-        Self {
-            store,
-            state,
-            monitor,
-            job,
-        }
+        Self { store, state }
     }
 }

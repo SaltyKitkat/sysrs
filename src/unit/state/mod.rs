@@ -1,4 +1,7 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt::Display,
+};
 
 use tokio::{
     sync::{
@@ -16,8 +19,39 @@ pub enum State {
     Stopped,
     Failed,
     Starting,
-    Running,
+    Active,
     Stopping,
+}
+
+impl Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            State::Uninit => "Uninit",
+            State::Stopped => "Stopped",
+            State::Failed => "Failed",
+            State::Starting => "Starting",
+            State::Active => "Active",
+            State::Stopping => "Stopping",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl State {
+    pub(crate) fn is_active(&self) -> bool {
+        match self {
+            State::Uninit | State::Stopped | State::Failed | State::Starting | State::Stopping => {
+                false
+            }
+            State::Active => true,
+        }
+    }
+    pub(crate) fn is_inactive(&self) -> bool {
+        match self {
+            State::Starting | State::Active | State::Stopping => false,
+            State::Uninit | State::Stopped | State::Failed => true,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -25,14 +59,15 @@ pub(crate) struct StateManager {
     state: HashMap<UnitEntry, State>,
     monitor: HashMap<UnitEntry, Vec<oneshot::Sender<State>>>,
 }
+
 pub(crate) enum Action {
-    Set(State),
     Get(oneshot::Sender<State>),
+    Monitor(oneshot::Sender<State>),
+    Set(State),
     SetWithCondition {
         target: State,
         condition: Box<dyn FnOnce(State) -> bool + Send + 'static>,
     },
-    Monitor(oneshot::Sender<State>),
 }
 pub(crate) struct Message(UnitEntry, Action);
 
@@ -52,21 +87,11 @@ impl StateManager {
     fn serve(&mut self, msg: Message) {
         let entry = msg.0;
         match msg.1 {
-            Action::Set(new_state) => {
-                self.trigger_monitors(&entry, new_state);
-                self.state.insert(entry, new_state);
-            }
             Action::Get(s) => {
                 if let Some(&state) = self.state.get(&entry) {
                     s.send(state).ok();
-                }
-            }
-            Action::SetWithCondition { target, condition } => {
-                if let Entry::Occupied(mut e) = self.state.entry(entry.clone()) {
-                    if condition(e.get().clone()) {
-                        *e.get_mut() = target;
-                        self.trigger_monitors(&entry, target);
-                    }
+                } else {
+                    s.send(State::Uninit).ok();
                 }
             }
             Action::Monitor(s) => match self.monitor.entry(entry) {
@@ -77,7 +102,23 @@ impl StateManager {
                     v.insert(vec![s]);
                 }
             },
+            Action::Set(new_state) => self.set(entry, new_state),
+            Action::SetWithCondition {
+                target: new_state,
+                condition,
+            } => {
+                let old_state = self.state.get(&entry).unwrap_or(&State::Uninit);
+                if condition(*old_state) {
+                    self.set(entry, new_state);
+                }
+            }
         }
+    }
+
+    fn set(&mut self, entry: UnitEntry, state: State) {
+        println!("setting state: `{entry}` to `{state}`");
+        self.trigger_monitors(&entry, state);
+        self.state.insert(entry, state);
     }
 
     fn trigger_monitors(&mut self, entry: &UnitEntry, new_state: State) {
@@ -89,13 +130,13 @@ impl StateManager {
     }
 }
 
-pub(crate) async fn get_state(state_manager: &Sender<Message>, entry: UnitEntry) -> Option<State> {
+pub(crate) async fn get_state(state_manager: &Sender<Message>, entry: UnitEntry) -> State {
     let (s, r) = oneshot::channel();
     state_manager
         .send(Message(entry, Action::Get(s)))
         .await
         .unwrap();
-    r.await.ok()
+    r.await.unwrap()
 }
 
 pub(crate) async fn set_state(state_manager: &Sender<Message>, entry: UnitEntry, state: State) {
@@ -112,10 +153,9 @@ pub(crate) async fn set_state_with_condition(
     entry: UnitEntry,
     target: State,
     condition: impl FnOnce(State) -> bool + Send + 'static,
-) -> Option<Result<State, State>> {
+) -> Result<State, State> {
     // hook: add oneshot in condition closure
-    // if condition called, the unit exists, then get the state
-    // else return none
+    // and get the previous state
     let (s, r) = oneshot::channel();
     state_manager
         .send(Message(
@@ -132,7 +172,7 @@ pub(crate) async fn set_state_with_condition(
         ))
         .await
         .unwrap();
-    r.await.ok().or(None)
+    r.await.unwrap()
 }
 
 pub(crate) async fn register_state_monitor(

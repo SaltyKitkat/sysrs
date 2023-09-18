@@ -73,13 +73,19 @@ impl Unit for UnitImpl<Impl> {
         match run_cmd(&self.sub.exec_start) {
             Ok(mut child) => match kind {
                 Kind::Simple => {
-                    todo!();
+                    set_state(&state_manager, entry.clone(), State::Active).await;
+                    let exit_status = child.wait().await.unwrap();
+                    if exit_status.success() {
+                        set_state(&state_manager, entry, State::Stopped).await;
+                    } else {
+                        set_state(&state_manager, entry, State::Failed).await;
+                    }
                 }
                 Kind::Forking => todo!(),
                 Kind::Oneshot => {
                     tokio::spawn(async move {
-                        let exit_state = child.wait().await.unwrap();
-                        if exit_state.success() {
+                        let exit_status = child.wait().await.unwrap();
+                        if exit_status.success() {
                             set_state(&state_manager, entry, State::Stopped).await
                         } else {
                             set_state(&state_manager, entry, State::Failed).await

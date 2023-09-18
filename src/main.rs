@@ -1,10 +1,13 @@
 use std::time::Duration;
 
+use futures::StreamExt;
 use rustix::process;
+use tap::Tap;
 use tokio::{
     sync::mpsc::{channel, Sender},
-    time::sleep,
+    time::sleep, fs,
 };
+use tokio_stream::wrappers::ReadDirStream;
 use unit::state::StateManager;
 
 use crate::{
@@ -57,35 +60,21 @@ async fn async_main() {
     //     })
     //     .await;
     // dbg!(store);
-    // let sshd_service = UnitImpl::<ServiceImpl> {
-    //     common: UnitCommonImpl {
-    //         name: "sshd.service".into(),
-    //         description: "".into(),
-    //         documentation: "".into(),
-    //         deps: todo!(),
-    //     },
-    //     kind: ServiceImpl {
-    //         exec_start: "echo service_started".into(),
-    //         exec_stop: "echo stopped".into(),
-    //         exec_restart: "echo restart".into(),
-    //     },
-    // };
 
-    let t0 = include_str!("unit/service/t0.service");
-    let t0: Service = toml::from_str(t0).unwrap();
-    dbg!(&t0);
-    let t0: UnitImpl<Impl> = t0.into();
-    dbg!(&t0);
-    let entry = UnitEntry::from(&t0);
+    let t0 = load_service(include_str!("unit/service/t0.service"));
+    let t1 = load_service(include_str!("unit/service/t1.service"));
+    let entry0 = UnitEntry::from(&t0);
     let actors = Actors::new();
     println!("before insert unit");
     update_unit(&actors.store, t0).await;
+    update_unit(&actors.store, t1).await;
     println!("after insert unit");
     println!("before start unit");
-    start_unit(&actors.store, entry.clone()).await;
+    start_unit(&actors.store, entry0.clone()).await;
     println!("after start unit");
     sleep(Duration::from_secs(1)).await;
-    start_unit(&actors.store, entry).await;
+    start_unit(&actors.store, entry0).await;
+    sleep(Duration::from_secs(1)).await;
     println!("tokio finished!");
 }
 
@@ -106,4 +95,12 @@ impl Actors {
 
         Self { store, state }
     }
+}
+
+fn load_service(s: &str) -> UnitImpl<Impl> {
+    let t0 = s;
+    let t0: Service = toml::from_str(t0).unwrap();
+    dbg!(&t0);
+    let t0: UnitImpl<Impl> = t0.into();
+    dbg!(t0)
 }

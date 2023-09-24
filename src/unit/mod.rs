@@ -7,7 +7,6 @@ use crate::Rc;
 
 pub(crate) mod guard;
 pub(crate) mod mount;
-pub(crate) mod rt_info;
 pub(crate) mod service;
 pub(crate) mod socket;
 pub(crate) mod state;
@@ -77,9 +76,21 @@ pub(crate) trait Unit: Debug {
 
     fn deps(&self) -> Rc<UnitDeps>;
 
-    async fn start(&self, state_manager: Sender<state::Message>);
-    async fn stop(&self, state_manager: Sender<state::Message>);
-    async fn restart(&self, state_manager: Sender<state::Message>);
+    async fn start(
+        &self,
+        state_manager: Sender<state::Message>,
+        guard_manager: Sender<guard::Message>,
+    );
+    async fn stop(
+        &self,
+        state_manager: Sender<state::Message>,
+        guard_manager: Sender<guard::Message>,
+    );
+    async fn restart(
+        &self,
+        state_manager: Sender<state::Message>,
+        guard_manager: Sender<guard::Message>,
+    );
 }
 
 #[derive(Debug)]

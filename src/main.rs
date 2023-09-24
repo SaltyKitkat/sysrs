@@ -9,9 +9,10 @@ use tokio::{
 
 use crate::{
     unit::{
-        service::{Impl, Service},
-        store::{start_unit, update_unit, UnitStore},
-        UnitEntry, UnitImpl,
+        guard::GuardManager,
+        service::{loader::Service, Impl},
+        store::{update_unit, UnitStore},
+        UnitImpl,
     },
     util::{
         dbus::{connect_dbus, DbusServer},
@@ -62,39 +63,57 @@ async fn async_main() {
     //     .await;
     // dbg!(store);
 
-    let t0 = load_service(include_str!("unit/service/t0.service"));
-    let t1 = load_service(include_str!("unit/service/t1.service"));
-    let entry0 = UnitEntry::from(&t0);
     let actors = Actors::new();
     let _conn = connect_dbus(DbusServer::new(actors.store.clone(), actors.state.clone()))
         .await
         .unwrap();
     println!("before insert unit");
-    update_unit(&actors.store, t0).await;
-    update_unit(&actors.store, t1).await;
+    update_unit(
+        &actors.store,
+        load_service(include_str!("unit/service/t0.service")),
+    )
+    .await;
+    update_unit(
+        &actors.store,
+        load_service(include_str!("unit/service/t1.service")),
+    )
+    .await;
+    update_unit(
+        &actors.store,
+        load_service(include_str!("unit/service/sleep.service")),
+    )
+    .await;
     println!("after insert unit");
     yield_now().await;
     yield_now().await;
-    sleep(Duration::from_secs(30)).await;
+    sleep(Duration::from_secs(300)).await;
     println!("tokio finished!");
 }
 
 pub(crate) struct Actors {
     pub(crate) store: Sender<unit::store::Message>,
     pub(crate) state: Sender<unit::state::Message>,
+    pub(crate) guard: Sender<unit::guard::Message>,
 }
 
 impl Actors {
     pub(crate) fn new() -> Self {
-        const CHANNEL_LEN: usize = 4;
+        // 1024 should be big enough for normal use
+        const CHANNEL_LEN: usize = 1024;
 
         let (store, store_rx) = channel(CHANNEL_LEN);
         let (state, state_rx) = channel(CHANNEL_LEN);
+        let (guard, guard_rx) = channel(CHANNEL_LEN);
 
-        UnitStore::new(state.clone()).run(store_rx);
+        UnitStore::new(state.clone(), guard.clone()).run(store_rx);
         StateManager::new().run(state_rx);
+        GuardManager::new(guard.clone(), store.clone(), state.clone()).run(guard_rx);
 
-        Self { store, state }
+        Self {
+            store,
+            state,
+            guard,
+        }
     }
 }
 

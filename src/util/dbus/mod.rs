@@ -5,7 +5,7 @@ use zbus::{dbus_interface, Connection, ConnectionBuilder};
 
 use crate::unit::{
     state::{self, print_state, register_state_monitor, State},
-    store::{self, print_store, start_unit},
+    store::{self, print_store, start_unit, stop_unit},
     UnitEntry,
 };
 
@@ -29,7 +29,20 @@ impl DbusServer {
     async fn start_unit(&self, unit: &str) -> u8 {
         let id = UnitEntry::from(unit);
         start_unit(&self.store, id.clone()).await;
-        // todo: really wait unit change to starting and then get the next state
+        // todo: really wait unit change to starting and then get the result
+        sleep(Duration::from_millis(10)).await;
+        let state = register_state_monitor(&self.state, id, |s| s == State::Starting).await;
+        let state = match state.await.unwrap() {
+            Ok(s) => s,
+            Err(s) => dbg!(s),
+        };
+        state as _
+    }
+
+    async fn stop_unit(&self, unit: &str) -> u8 {
+        let id = UnitEntry::from(unit);
+        stop_unit(&self.store, id.clone()).await;
+        // todo: really wait unit change to stop and then get the result
         sleep(Duration::from_millis(10)).await;
         let state = register_state_monitor(&self.state, id, |s| s == State::Starting).await;
         let state = match state.await.unwrap() {

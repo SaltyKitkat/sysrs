@@ -3,6 +3,7 @@ use rustix::fs::{MountFlags, UnmountFlags};
 use tokio::sync::mpsc::Sender;
 
 use super::{
+    guard,
     state::{self, set_state_with_condition, State},
     UnitCommon, UnitDeps, UnitEntry, UnitImpl,
 };
@@ -82,7 +83,11 @@ impl Unit for UnitImpl<Impl> {
         UnitKind::Mount
     }
 
-    async fn start(&self, state_manager: Sender<state::Message>) {
+    async fn start(
+        &self,
+        state_manager: Sender<state::Message>,
+        guard_manager: Sender<guard::Message>,
+    ) {
         let Self {
             common: _,
             sub: mount_info,
@@ -110,7 +115,11 @@ impl Unit for UnitImpl<Impl> {
         }
     }
 
-    async fn stop(&self, state_manager: Sender<state::Message>) {
+    async fn stop(
+        &self,
+        state_manager: Sender<state::Message>,
+        guard_manager: Sender<guard::Message>,
+    ) {
         let Self {
             common: _,
             sub: mount_info,
@@ -142,7 +151,11 @@ impl Unit for UnitImpl<Impl> {
         }
     }
 
-    async fn restart(&self, state_mstate_manager: Sender<state::Message>) {
+    async fn restart(
+        &self,
+        state_mstate_manager: Sender<state::Message>,
+        guard_manager: Sender<guard::Message>,
+    ) {
         todo!()
     }
 

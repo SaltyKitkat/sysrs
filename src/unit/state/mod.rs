@@ -63,18 +63,6 @@ pub(crate) struct StateManager {
     monitor: HashMap<UnitEntry, Vec<MonitorRet>>,
 }
 
-enum Action {
-    Get(oneshot::Sender<State>),
-    Monitor {
-        s: MonitorRet,
-        cond: Box<dyn FnOnce(State) -> bool + Send + 'static>,
-    },
-    Set(State),
-    SetWithCondition {
-        target: State,
-        condition: Box<dyn FnOnce(State) -> bool + Send + 'static>,
-    },
-}
 pub(crate) enum Message {
     DbgPrint,
     Get(UnitEntry, oneshot::Sender<State>),

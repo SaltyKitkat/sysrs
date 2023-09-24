@@ -1,12 +1,14 @@
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use tokio::{io, process::Child, sync::mpsc::Sender};
+use tokio::{io, process::Child, select, sync::mpsc::Sender};
 
 use super::{
+    guard::{self, create_guard, guard_stop},
     state::{self, set_state_with_condition, State},
     Unit, UnitCommon, UnitDeps, UnitEntry, UnitImpl, UnitKind,
 };
 use crate::{unit::state::set_state, Rc};
+
+pub(crate) mod loader;
 
 #[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
 pub(crate) enum Kind {
@@ -57,7 +59,11 @@ impl Unit for UnitImpl<Impl> {
         self.common.deps.clone()
     }
 
-    async fn start(&self, state_manager: Sender<state::Message>) {
+    async fn start(
+        &self,
+        state_manager: Sender<state::Message>,
+        guard_manager: Sender<guard::Message>,
+    ) {
         // todo: send job to job manager and let it to set state due to job status
         // unit status is expected to be starting here
         let kind = self.sub.kind;
@@ -74,12 +80,30 @@ impl Unit for UnitImpl<Impl> {
             Ok(mut child) => match kind {
                 Kind::Simple => {
                     set_state(&state_manager, entry.clone(), State::Active).await;
-                    let exit_status = child.wait().await.unwrap();
-                    if exit_status.success() {
-                        set_state(&state_manager, entry, State::Stopped).await;
-                    } else {
-                        set_state(&state_manager, entry, State::Failed).await;
-                    }
+                    println!("simple service: state set!");
+                    create_guard(
+                        &guard_manager,
+                        entry.clone(),
+                        |store, state, mut rx| async move {
+                            select! {
+                                exit_status = child.wait() => {
+                                    let exit_status = exit_status.unwrap();
+                                    if exit_status.success() {
+                                        set_state(&state, entry, State::Stopped).await;
+                                    } else {
+                                        set_state(&state, entry, State::Failed).await;
+                                    }
+                                },
+                                msg = rx.recv() => {
+                                    match msg.unwrap() {
+                                        guard::GMessage::Stop => todo!(),
+                                        guard::GMessage::Kill => child.kill().await.unwrap(),
+                                    }
+                                }
+                            }
+                        },
+                    )
+                    .await;
                 }
                 Kind::Forking => todo!(),
                 Kind::Oneshot => {
@@ -104,11 +128,38 @@ impl Unit for UnitImpl<Impl> {
         }
     }
 
-    async fn stop(&self, state_manager: Sender<state::Message>) {
-        todo!()
+    async fn stop(
+        &self,
+        state_manager: Sender<state::Message>,
+        guard_manager: Sender<guard::Message>,
+    ) {
+        let entry = UnitEntry::from(self);
+        match set_state_with_condition(&state_manager, entry.clone(), State::Stopping, |s| {
+            s.is_active()
+        })
+        .await
+        {
+            Ok(_) => (),
+            Err(_) => todo!(),
+        }
+
+        match self.sub.kind {
+            Kind::Simple => {
+                guard_stop(&guard_manager, entry).await;
+            }
+            Kind::Forking => todo!(),
+            Kind::Oneshot => {
+                let child = run_cmd(&self.sub.exec_stop).unwrap().wait().await;
+            }
+            Kind::Notify => todo!(),
+        }
     }
 
-    async fn restart(&self, state_manager: Sender<state::Message>) {
+    async fn restart(
+        &self,
+        state_manager: Sender<state::Message>,
+        guard_manager: Sender<guard::Message>,
+    ) {
         todo!()
     }
 }
@@ -143,79 +194,6 @@ impl UnitImpl<Impl> {
                 exec_stop: start.as_ref().into(),
                 exec_restart: start.as_ref().into(),
             },
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Service {
-    name: String,
-    #[serde(default)]
-    requires: String,
-    #[serde(default)]
-    wants: String,
-    #[serde(default)]
-    before: String,
-    #[serde(default)]
-    after: String,
-    #[serde(default)]
-    conflicts: String,
-    kind: Kind,
-    start: String,
-    stop: String,
-    restart: String,
-}
-impl From<Service> for UnitImpl<Impl> {
-    fn from(value: Service) -> Self {
-        let Service {
-            name,
-            requires,
-            wants,
-            before,
-            after,
-            conflicts,
-            kind,
-            start,
-            stop,
-            restart,
-        } = value;
-        Self::gen_test(
-            name,
-            UnitDeps::from_strs(requires, wants, before, after, conflicts),
-            kind,
-            start,
-            stop,
-            restart,
-        )
-    }
-}
-
-fn str_to_unitentrys(s: String) -> Box<[UnitEntry]> {
-    s.split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| UnitEntry::from(s))
-        .collect()
-}
-impl UnitDeps {
-    fn from_strs(
-        requires: String,
-        wants: String,
-        before: String,
-        after: String,
-        conflicts: String,
-    ) -> Self {
-        let requires = str_to_unitentrys(requires);
-        let wants = str_to_unitentrys(wants);
-        let before = str_to_unitentrys(before);
-        let after = str_to_unitentrys(after);
-        let conflicts = str_to_unitentrys(conflicts);
-        Self {
-            requires,
-            wants,
-            after,
-            before,
-            conflicts,
         }
     }
 }

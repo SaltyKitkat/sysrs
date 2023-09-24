@@ -1,22 +1,16 @@
-use std::{
-    collections::{hash_map::Entry, HashMap, VecDeque},
-    f32::consts::E,
-};
+use std::collections::{HashMap, VecDeque};
 
-use tap::Tap;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
     task::JoinHandle,
 };
 
 use super::{
+    guard,
     state::{self, get_state},
     Unit, UnitEntry,
 };
-use crate::{
-    unit::state::{set_state_with_condition, State},
-    Rc,
-};
+use crate::Rc;
 
 type Item = Rc<dyn Unit + Send + Sync + 'static>;
 
@@ -24,6 +18,7 @@ type Item = Rc<dyn Unit + Send + Sync + 'static>;
 pub(crate) struct UnitStore {
     map: HashMap<UnitEntry, Item>, // info in unit files
     state_manager: Sender<state::Message>,
+    guard_manager: Sender<guard::Message>,
 }
 
 pub(crate) enum Message {
@@ -36,10 +31,14 @@ pub(crate) enum Message {
 }
 
 impl UnitStore {
-    pub(crate) fn new(state_manager: Sender<state::Message>) -> Self {
+    pub(crate) fn new(
+        state_manager: Sender<state::Message>,
+        guard_manager: Sender<guard::Message>,
+    ) -> Self {
         Self {
             map: HashMap::new(),
             state_manager,
+            guard_manager,
         }
     }
 
@@ -61,11 +60,18 @@ impl UnitStore {
                             // find deps
                             let mut requires = self.find_requires(entry).await;
                             while let Some(unit) = requires.pop() {
-                                unit.start(self.state_manager.clone()).await;
+                                unit.start(self.state_manager.clone(), self.guard_manager.clone())
+                                    .await;
                             }
                         }
                     }
-                    Message::Stop(entry) => todo!(),
+                    Message::Stop(entry) => {
+                        println!("stopping unit: {:?}", &entry);
+                        if let Some(unit) = self.map.get(&entry) {
+                            unit.stop(self.state_manager.clone(), self.guard_manager.clone())
+                                .await;
+                        }
+                    }
                     Message::Restart(entry) => todo!(),
                 }
             }
@@ -102,10 +108,6 @@ impl UnitStore {
         }
         stack
     }
-
-    fn clear(&mut self) {
-        self.map.clear()
-    }
 }
 
 pub(crate) async fn update_unit(store: &Sender<Message>, unit: impl Unit + Send + Sync + 'static) {
@@ -118,6 +120,10 @@ pub(crate) async fn update_unit(store: &Sender<Message>, unit: impl Unit + Send 
 
 pub(crate) async fn start_unit(store: &Sender<Message>, entry: UnitEntry) {
     store.send(Message::Start(entry)).await.unwrap();
+}
+
+pub(crate) async fn stop_unit(store: &Sender<Message>, entry: UnitEntry) {
+    store.send(Message::Stop(entry)).await.unwrap();
 }
 
 pub(crate) async fn print_store(store: &Sender<Message>) {

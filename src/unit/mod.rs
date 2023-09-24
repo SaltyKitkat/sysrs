@@ -5,8 +5,11 @@ use tokio::sync::mpsc::Sender;
 
 use crate::Rc;
 
+pub(crate) mod guard;
 pub(crate) mod mount;
+pub(crate) mod rt_info;
 pub(crate) mod service;
+pub(crate) mod socket;
 pub(crate) mod state;
 pub(crate) mod store;
 
@@ -33,7 +36,7 @@ impl Display for UnitKind {
 }
 
 #[derive(Debug)]
-pub(crate) struct UnitCommonImpl {
+pub(crate) struct UnitCommon {
     name: Rc<str>,
     description: Rc<str>,
     documentation: Rc<str>,
@@ -81,7 +84,7 @@ pub(crate) trait Unit: Debug {
 
 #[derive(Debug)]
 pub(crate) struct UnitImpl<KindImpl> {
-    pub common: UnitCommonImpl,
+    pub common: UnitCommon,
     pub sub: KindImpl,
 }
 

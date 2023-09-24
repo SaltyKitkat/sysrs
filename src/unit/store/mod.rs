@@ -1,4 +1,7 @@
-use std::collections::{hash_map::Entry, HashMap, VecDeque};
+use std::{
+    collections::{hash_map::Entry, HashMap, VecDeque},
+    f32::consts::E,
+};
 
 use tap::Tap;
 use tokio::{
@@ -23,15 +26,14 @@ pub(crate) struct UnitStore {
     state_manager: Sender<state::Message>,
 }
 
-pub(crate) enum Action {
-    Update(Item),
-    Remove,
-    Start,
-    Stop,
-    Restart,
+pub(crate) enum Message {
+    DbgPrint,
+    Update(UnitEntry, Item),
+    Remove(UnitEntry),
+    Start(UnitEntry),
+    Stop(UnitEntry),
+    Restart(UnitEntry),
 }
-
-pub(crate) struct Message(UnitEntry, Action);
 
 impl UnitStore {
     pub(crate) fn new(state_manager: Sender<state::Message>) -> Self {
@@ -42,18 +44,18 @@ impl UnitStore {
     }
 
     pub(crate) fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
-        tokio::task::spawn(async move {
+        tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                let entry = msg.0;
-                match msg.1 {
-                    Action::Update(unit) => {
+                match msg {
+                    Message::DbgPrint => println!("{:#?}", self.map),
+                    Message::Update(entry, unit) => {
                         println!("updating unit: {:?}", &entry);
                         self.map.insert(entry, unit);
                     }
-                    Action::Remove => {
+                    Message::Remove(entry) => {
                         self.map.remove(&entry);
                     }
-                    Action::Start => {
+                    Message::Start(entry) => {
                         println!("starting unit: {:?}", &entry);
                         if let Some(unit) = self.map.get(&entry) {
                             // find deps
@@ -63,8 +65,8 @@ impl UnitStore {
                             }
                         }
                     }
-                    Action::Stop => todo!(),
-                    Action::Restart => todo!(),
+                    Message::Stop(entry) => todo!(),
+                    Message::Restart(entry) => todo!(),
                 }
             }
         })
@@ -109,72 +111,15 @@ impl UnitStore {
 pub(crate) async fn update_unit(store: &Sender<Message>, unit: impl Unit + Send + Sync + 'static) {
     let entry = UnitEntry::from(&unit);
     store
-        .send(Message(entry, Action::Update(Rc::new(unit))))
+        .send(Message::Update(entry, Rc::new(unit)))
         .await
         .unwrap();
 }
 
 pub(crate) async fn start_unit(store: &Sender<Message>, entry: UnitEntry) {
-    store.send(Message(entry, Action::Start)).await.unwrap();
+    store.send(Message::Start(entry)).await.unwrap();
 }
 
-// pub struct DepMgr {
-//     map: HashMap<UnitEntry, UnitDeps>,
-// }
-//
-// impl DepMgr {
-//     pub fn new() -> Self {
-//         Self {
-//             map: HashMap::new(),
-//         }
-//     }
-//
-//     // pub fn insert(&mut self, unit: &dyn Unit) {
-//     //     let entry: UnitEntry = unit.into();
-//     //     let UnitDeps {
-//     //         requires,
-//     //         required_by,
-//     //     } = unit.deps().clone();
-//     //     for unit in &required_by {
-//     //         self.map
-//     //             .entry(unit.clone())
-//     //             .or_default()
-//     //             .requires
-//     //             .push(entry.clone());
-//     //     }
-//     //     match self.map.entry(entry) {
-//     //         Entry::Occupied(o) => o.into_mut().requires.extend(requires),
-//     //         Entry::Vacant(v) => {
-//     //             v.insert(UnitDeps {
-//     //                 requires,
-//     //                 required_by,
-//     //             });
-//     //         }
-//     //     }
-//     // }
-//
-//     pub(crate) fn do_with_deps(
-//         &self,
-//         unit: UnitEntry,
-//         mut action: impl FnMut(&UnitEntry),
-//         mut condition: impl FnMut(&UnitEntry) -> bool,
-//     ) {
-//         if !condition(&unit) {
-//             return;
-//         }
-//         let mut stack = Vec::new();
-//         let mut queue = VecDeque::new();
-//         queue.push_back(unit);
-//         while let Some(current) = queue.pop_front() {
-//             if let Some(unit) = self.map.get(&current) {
-//                 queue.extend(unit.requires.iter().filter(|u| condition(u)).cloned());
-//             }
-//             if !stack.contains(&current) {
-//                 stack.push(current);
-//             }
-//         }
-//         for unit in stack {
-//             action(&unit);
-//         }
-//     }
-// }
+pub(crate) async fn print_store(store: &Sender<Message>) {
+    store.send(Message::DbgPrint).await.unwrap()
+}

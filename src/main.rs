@@ -1,14 +1,11 @@
 use std::time::Duration;
 
-use futures::StreamExt;
 use rustix::process;
-use tap::Tap;
 use tokio::{
     sync::mpsc::{channel, Sender},
-    time::sleep, fs,
+    task::yield_now,
+    time::sleep,
 };
-use tokio_stream::wrappers::ReadDirStream;
-use unit::state::StateManager;
 
 use crate::{
     unit::{
@@ -16,8 +13,12 @@ use crate::{
         store::{start_unit, update_unit, UnitStore},
         UnitEntry, UnitImpl,
     },
-    util::event::register_sig_handlers,
+    util::{
+        dbus::{connect_dbus, DbusServer},
+        event::register_sig_handlers,
+    },
 };
+use unit::state::StateManager;
 
 // type Rc<T> = std::rc::Rc<T>;
 type Rc<T> = std::sync::Arc<T>;
@@ -65,16 +66,16 @@ async fn async_main() {
     let t1 = load_service(include_str!("unit/service/t1.service"));
     let entry0 = UnitEntry::from(&t0);
     let actors = Actors::new();
+    let _conn = connect_dbus(DbusServer::new(actors.store.clone(), actors.state.clone()))
+        .await
+        .unwrap();
     println!("before insert unit");
     update_unit(&actors.store, t0).await;
     update_unit(&actors.store, t1).await;
     println!("after insert unit");
-    println!("before start unit");
-    start_unit(&actors.store, entry0.clone()).await;
-    println!("after start unit");
-    sleep(Duration::from_secs(1)).await;
-    start_unit(&actors.store, entry0).await;
-    sleep(Duration::from_secs(1)).await;
+    yield_now().await;
+    yield_now().await;
+    sleep(Duration::from_secs(30)).await;
     println!("tokio finished!");
 }
 

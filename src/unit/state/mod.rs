@@ -13,9 +13,10 @@ use tokio::{
 
 use super::UnitEntry;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum State {
-    Uninit,
+    #[default]
+    Uninit = 0,
     Stopped,
     Failed,
     Starting,
@@ -54,22 +55,41 @@ impl State {
     }
 }
 
+type MonitorRet = oneshot::Sender<Result<State, State>>;
+
 #[derive(Debug, Default)]
 pub(crate) struct StateManager {
     state: HashMap<UnitEntry, State>,
-    monitor: HashMap<UnitEntry, Vec<oneshot::Sender<State>>>,
+    monitor: HashMap<UnitEntry, Vec<MonitorRet>>,
 }
 
-pub(crate) enum Action {
+enum Action {
     Get(oneshot::Sender<State>),
-    Monitor(oneshot::Sender<State>),
+    Monitor {
+        s: MonitorRet,
+        cond: Box<dyn FnOnce(State) -> bool + Send + 'static>,
+    },
     Set(State),
     SetWithCondition {
         target: State,
         condition: Box<dyn FnOnce(State) -> bool + Send + 'static>,
     },
 }
-pub(crate) struct Message(UnitEntry, Action);
+pub(crate) enum Message {
+    DbgPrint,
+    Get(UnitEntry, oneshot::Sender<State>),
+    Monitor {
+        entry: UnitEntry,
+        s: MonitorRet,
+        cond: Box<dyn FnOnce(State) -> bool + Send + 'static>,
+    },
+    Set(UnitEntry, State),
+    SetWithCondition {
+        entry: UnitEntry,
+        new_state: State,
+        condition: Box<dyn FnOnce(State) -> bool + Send + 'static>,
+    },
+}
 
 impl StateManager {
     pub(crate) fn new() -> Self {
@@ -85,26 +105,34 @@ impl StateManager {
     }
 
     fn serve(&mut self, msg: Message) {
-        let entry = msg.0;
-        match msg.1 {
-            Action::Get(s) => {
+        match msg {
+            Message::DbgPrint => println!("{:#?}", self.state),
+            Message::Get(entry, s) => {
                 if let Some(&state) = self.state.get(&entry) {
                     s.send(state).ok();
                 } else {
                     s.send(State::Uninit).ok();
                 }
             }
-            Action::Monitor(s) => match self.monitor.entry(entry) {
-                Entry::Occupied(mut o) => {
-                    o.get_mut().push(s);
+            Message::Monitor { entry, s, cond } => {
+                let state = self.state.get(&entry).copied().unwrap_or_default();
+                if cond(state) {
+                    match self.monitor.entry(entry) {
+                        Entry::Occupied(mut o) => {
+                            o.get_mut().push(s);
+                        }
+                        Entry::Vacant(v) => {
+                            v.insert(vec![s]);
+                        }
+                    }
+                } else {
+                    s.send(Err(state)).unwrap();
                 }
-                Entry::Vacant(v) => {
-                    v.insert(vec![s]);
-                }
-            },
-            Action::Set(new_state) => self.set(entry, new_state),
-            Action::SetWithCondition {
-                target: new_state,
+            }
+            Message::Set(entry, new_state) => self.set(entry, new_state),
+            Message::SetWithCondition {
+                entry,
+                new_state,
                 condition,
             } => {
                 let old_state = self.state.get(&entry).unwrap_or(&State::Uninit);
@@ -124,7 +152,7 @@ impl StateManager {
     fn trigger_monitors(&mut self, entry: &UnitEntry, new_state: State) {
         if let Some(monitors) = self.monitor.remove(entry) {
             for monitor in monitors {
-                monitor.send(new_state).ok();
+                monitor.send(Ok(new_state)).ok();
             }
         }
     }
@@ -132,16 +160,13 @@ impl StateManager {
 
 pub(crate) async fn get_state(state_manager: &Sender<Message>, entry: UnitEntry) -> State {
     let (s, r) = oneshot::channel();
-    state_manager
-        .send(Message(entry, Action::Get(s)))
-        .await
-        .unwrap();
+    state_manager.send(Message::Get(entry, s)).await.unwrap();
     r.await.unwrap()
 }
 
 pub(crate) async fn set_state(state_manager: &Sender<Message>, entry: UnitEntry, state: State) {
     state_manager
-        .send(Message(entry, Action::Set(state)))
+        .send(Message::Set(entry, state))
         .await
         .unwrap();
 }
@@ -151,25 +176,23 @@ pub(crate) async fn set_state(state_manager: &Sender<Message>, entry: UnitEntry,
 pub(crate) async fn set_state_with_condition(
     state_manager: &Sender<Message>,
     entry: UnitEntry,
-    target: State,
+    new_state: State,
     condition: impl FnOnce(State) -> bool + Send + 'static,
 ) -> Result<State, State> {
     // hook: add oneshot in condition closure
     // and get the previous state
     let (s, r) = oneshot::channel();
     state_manager
-        .send(Message(
+        .send(Message::SetWithCondition {
             entry,
-            Action::SetWithCondition {
-                target,
-                condition: Box::new(|state| {
-                    let ret = condition(state);
-                    let state = if ret { Ok(state) } else { Err(state) };
-                    s.send(state).unwrap();
-                    ret
-                }),
-            },
-        ))
+            new_state,
+            condition: Box::new(|state| {
+                let ret = condition(state);
+                let state = if ret { Ok(state) } else { Err(state) };
+                s.send(state).unwrap();
+                ret
+            }),
+        })
         .await
         .unwrap();
     r.await.unwrap()
@@ -178,11 +201,20 @@ pub(crate) async fn set_state_with_condition(
 pub(crate) async fn register_state_monitor(
     state_manager: &Sender<Message>,
     entry: UnitEntry,
-) -> oneshot::Receiver<State> {
+    cond: impl FnOnce(State) -> bool + Send + 'static,
+) -> oneshot::Receiver<Result<State, State>> {
     let (s, r) = oneshot::channel();
     state_manager
-        .send(Message(entry, Action::Monitor(s)))
+        .send(Message::Monitor {
+            entry,
+            s,
+            cond: Box::new(cond),
+        })
         .await
         .unwrap();
     r
+}
+
+pub(crate) async fn print_state(state_manager: &Sender<Message>) {
+    state_manager.send(Message::DbgPrint).await.unwrap();
 }

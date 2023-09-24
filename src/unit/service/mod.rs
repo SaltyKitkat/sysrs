@@ -4,7 +4,7 @@ use tokio::{io, process::Child, sync::mpsc::Sender};
 
 use super::{
     state::{self, set_state_with_condition, State},
-    Unit, UnitCommonImpl, UnitDeps, UnitEntry, UnitImpl, UnitKind,
+    Unit, UnitCommon, UnitDeps, UnitEntry, UnitImpl, UnitKind,
 };
 use crate::{unit::state::set_state, Rc};
 
@@ -131,7 +131,7 @@ impl UnitImpl<Impl> {
     ) -> Self {
         let null_str: Rc<str> = "".into();
         Self {
-            common: UnitCommonImpl {
+            common: UnitCommon {
                 name: name.as_ref().into(),
                 description: null_str.clone(),
                 documentation: null_str.clone(),

@@ -114,7 +114,7 @@ pub trait Unit {
     fn deps(&self) -> UnitDeps;
 
     fn start(&self， job_manager);
-    fn stop(&self), job_manager;
+    fn stop(&self, job_manager);
     fn restart(&self, job_manager);
 }
 ```

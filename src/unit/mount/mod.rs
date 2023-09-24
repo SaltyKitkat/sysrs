@@ -4,7 +4,7 @@ use tokio::sync::mpsc::Sender;
 
 use super::{
     state::{self, set_state_with_condition, State},
-    UnitCommonImpl, UnitDeps, UnitEntry, UnitImpl,
+    UnitCommon, UnitDeps, UnitEntry, UnitImpl,
 };
 use crate::{
     fstab::{FsEntry, MountInfo},
@@ -47,7 +47,7 @@ impl From<Impl> for UnitImpl<Impl> {
             name.replace('-', "\\x2d").replace('/', "-")
         } + ".mount")
             .into();
-        let common = UnitCommonImpl {
+        let common = UnitCommon {
             name,
             description: String::new().into(),
             documentation: String::new().into(),

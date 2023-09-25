@@ -81,28 +81,25 @@ impl Unit for UnitImpl<Impl> {
                 Kind::Simple => {
                     set_state(&state_manager, entry.clone(), State::Active).await;
                     println!("simple service: state set!");
-                    create_guard(
-                        &guard_manager,
-                        entry.clone(),
-                        |store, state, mut rx| async move {
-                            select! {
-                                exit_status = child.wait() => {
-                                    let exit_status = exit_status.unwrap();
-                                    if exit_status.success() {
-                                        set_state(&state, entry, State::Stopped).await;
-                                    } else {
-                                        set_state(&state, entry, State::Failed).await;
-                                    }
-                                },
-                                msg = rx.recv() => {
-                                    match msg.unwrap() {
-                                        guard::GMessage::Stop => todo!(),
-                                        guard::GMessage::Kill => child.kill().await.unwrap(),
-                                    }
+                    create_guard(&guard_manager, entry.clone(), |store, mut rx| async move {
+                        select! {
+                            exit_status = child.wait() => {
+                                let exit_status = exit_status.unwrap();
+                                if exit_status.success() {
+                                    State::Stopped
+                                } else {
+                                    State::Failed
                                 }
+                            },
+                            msg = rx.recv() => {
+                                match msg.unwrap() {
+                                    guard::GMessage::Stop => todo!(),
+                                    guard::GMessage::Kill => child.kill().await.unwrap(),
+                                }
+                                State::Stopped
                             }
-                        },
-                    )
+                        }
+                    })
                     .await;
                 }
                 Kind::Forking => todo!(),

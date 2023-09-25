@@ -6,7 +6,10 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::{state, store, UnitEntry};
+use super::{
+    state::{self, set_state, State},
+    store, UnitEntry,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct GuardManager {
@@ -20,11 +23,7 @@ pub(crate) enum Message {
     Update(
         UnitEntry,
         Box<
-            dyn FnOnce(
-                    Sender<store::Message>,
-                    Sender<state::Message>,
-                    Receiver<GMessage>,
-                ) -> BoxFuture<'static, ()>
+            dyn FnOnce(Sender<store::Message>, Receiver<GMessage>) -> BoxFuture<'static, State>
                 + Send
                 + 'static,
         >,
@@ -54,12 +53,14 @@ impl GuardManager {
                 match msg {
                     Message::Update(u, s) => {
                         let (sender, recevier) = mpsc::channel(4);
-                        let f = s(self.store.clone(), self.state.clone(), recevier);
+                        let f = s(self.store.clone(), recevier);
                         self.map.insert(u.clone(), sender);
                         let sender = self.self_.clone();
+                        let state = self.state.clone();
                         tokio::spawn(async move {
-                            f.await;
+                            let new_state = f.await;
                             // remove the entry after the guard end
+                            set_state(&state, u.clone(), new_state).await;
                             sender.send(Message::Remove(u)).await.unwrap();
                         });
                     }
@@ -94,15 +95,13 @@ pub(crate) enum GMessage {
 
 pub(crate) async fn create_guard<F, Fut>(guard_manager: &Sender<Message>, u: UnitEntry, f: F)
 where
-    F: FnOnce(Sender<store::Message>, Sender<state::Message>, Receiver<GMessage>) -> Fut
-        + Send
-        + 'static,
-    Fut: Future<Output = ()> + Send + 'static,
+    F: FnOnce(Sender<store::Message>, Receiver<GMessage>) -> Fut + Send + 'static,
+    Fut: Future<Output = State> + Send + 'static,
 {
     guard_manager
         .send(Message::Update(
             u,
-            Box::new(|store, state, rx| Box::pin(f(store, state, rx))),
+            Box::new(|store, rx| Box::pin(f(store, rx))),
         ))
         .await
         .unwrap();

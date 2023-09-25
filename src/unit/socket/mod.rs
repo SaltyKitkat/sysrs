@@ -8,7 +8,10 @@ use super::{
     state::{self, set_state_with_condition},
     Unit, UnitDeps, UnitEntry, UnitImpl, UnitKind,
 };
-use crate::{unit::guard::create_guard, Rc};
+use crate::{
+    unit::{guard::create_guard, state::State, store::start_unit},
+    Rc,
+};
 
 #[derive(Debug)]
 pub(crate) struct Impl {
@@ -53,13 +56,19 @@ impl Unit for UnitImpl<Impl> {
         };
         let socket = UnixListener::bind(self.sub.path.as_ref()).unwrap();
         let fd = AsyncFd::new(socket).unwrap();
-        create_guard(&guard_manager, entry, |store, state, mut rx| async move {
-            select! {
-                read_ready = fd.readable() => read_ready.unwrap().retain_ready(),
-                msg = rx.recv() =>  match msg.unwrap() {
-                    guard::GMessage::Stop | guard::GMessage::Kill => {
-                        drop(fd);
+        create_guard(&guard_manager, entry.clone(), |store, mut rx| async move {
+            loop {
+                select! {
+                    read_ready = fd.readable() => {
+                        read_ready.unwrap().retain_ready();
+                        start_unit(&store, entry.clone()).await;
                     },
+                    msg = rx.recv() =>  match msg.unwrap() {
+                        guard::GMessage::Stop | guard::GMessage::Kill => {
+                            drop(fd);
+                            break State::Stopped;
+                        },
+                    }
                 }
             }
         })
@@ -72,6 +81,14 @@ impl Unit for UnitImpl<Impl> {
         guard_manager: Sender<guard::Message>,
     ) {
         let entry = UnitEntry::from(self);
+        match set_state_with_condition(&state_manager, entry.clone(), state::State::Stopping, |s| {
+            s.is_active()
+        })
+        .await
+        {
+            Ok(s) => (),
+            Err(s) => todo!(),
+        }
         guard_stop(&guard_manager, entry).await
     }
 

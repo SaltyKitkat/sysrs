@@ -12,18 +12,18 @@ use super::{
 };
 use crate::Rc;
 
-type Item = Rc<dyn Unit + Send + Sync + 'static>;
+type UnitObj = Rc<dyn Unit + Send + Sync + 'static>;
 
 #[derive(Debug)]
 pub(crate) struct UnitStore {
-    map: HashMap<UnitEntry, Item>, // info in unit files
+    map: HashMap<UnitEntry, UnitObj>, // info in unit files
     state_manager: Sender<state::Message>,
     guard_manager: Sender<guard::Message>,
 }
 
 pub(crate) enum Message {
     DbgPrint,
-    Update(UnitEntry, Item),
+    Update(UnitEntry, UnitObj),
     Remove(UnitEntry),
     Start(UnitEntry),
     Stop(UnitEntry),
@@ -56,7 +56,7 @@ impl UnitStore {
                     }
                     Message::Start(entry) => {
                         println!("starting unit: {:?}", &entry);
-                        if let Some(unit) = self.map.get(&entry) {
+                        if self.map.contains_key(&entry) {
                             // find deps
                             let mut requires = self.find_requires(entry).await;
                             while let Some(unit) = requires.pop() {
@@ -78,7 +78,7 @@ impl UnitStore {
         })
     }
 
-    async fn find_requires(&mut self, entry: UnitEntry) -> Vec<Item> {
+    async fn find_requires(&mut self, entry: UnitEntry) -> Vec<UnitObj> {
         let mut queue = VecDeque::new();
         queue.push_back(entry);
         let mut stack = Vec::new();

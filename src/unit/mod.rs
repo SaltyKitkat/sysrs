@@ -67,6 +67,14 @@ impl From<&str> for UnitEntry {
     }
 }
 
+impl<T: Unit> From<&T> for UnitEntry {
+    fn from(value: &T) -> Self {
+        Self {
+            name: value.name().clone(),
+        }
+    }
+}
+
 #[async_trait]
 pub(crate) trait Unit: Debug {
     fn name(&self) -> Rc<str>;
@@ -97,12 +105,4 @@ pub(crate) trait Unit: Debug {
 pub(crate) struct UnitImpl<KindImpl> {
     pub common: UnitCommon,
     pub sub: KindImpl,
-}
-
-impl<T: Unit> From<&T> for UnitEntry {
-    fn from(value: &T) -> Self {
-        Self {
-            name: value.name().clone(),
-        }
-    }
 }

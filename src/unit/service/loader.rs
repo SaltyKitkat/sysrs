@@ -1,5 +1,11 @@
+use crate::{
+    unit::UnitCommon,
+    util::loader::{empty_str, str_to_unitentrys},
+    Rc,
+};
+
 use super::{
-    super::{UnitDeps, UnitEntry, UnitImpl},
+    super::{UnitDeps, UnitImpl},
     Impl, Kind,
 };
 
@@ -40,32 +46,33 @@ impl From<Service> for UnitImpl<Impl> {
             stop,
             restart,
         } = value;
-        Self::gen_test(
-            name,
-            UnitDeps::from_strs(requires, wants, before, after, conflicts),
-            kind,
-            start,
-            stop,
-            restart,
-        )
-    }
-}
 
-pub(crate) fn str_to_unitentrys(s: String) -> Box<[UnitEntry]> {
-    s.split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| UnitEntry::from(s))
-        .collect()
+        Self {
+            common: UnitCommon {
+                name: name.into(),
+                description: empty_str(),
+                documentation: empty_str(),
+                deps: Rc::new(UnitDeps::from_strs(
+                    &requires, &wants, &before, &after, &conflicts,
+                )),
+            },
+            sub: Impl {
+                kind,
+                exec_start: start.into(),
+                exec_stop: stop.into(),
+                exec_restart: restart.into(),
+            },
+        }
+    }
 }
 
 impl UnitDeps {
     pub(crate) fn from_strs(
-        requires: String,
-        wants: String,
-        before: String,
-        after: String,
-        conflicts: String,
+        requires: &str,
+        wants: &str,
+        before: &str,
+        after: &str,
+        conflicts: &str,
     ) -> Self {
         let requires = str_to_unitentrys(requires);
         let wants = str_to_unitentrys(wants);
@@ -80,4 +87,12 @@ impl UnitDeps {
             conflicts,
         }
     }
+}
+
+pub(crate) fn load_service(s: &str) -> UnitImpl<Impl> {
+    let t0 = s;
+    let t0: Service = toml::from_str(t0).unwrap();
+    dbg!(&t0);
+    let t0: UnitImpl<Impl> = t0.into();
+    dbg!(t0)
 }

@@ -13,6 +13,8 @@ use crate::{
     Rc,
 };
 
+pub(crate) mod loader;
+
 #[derive(Debug)]
 pub(crate) struct Impl {
     path: Rc<Path>,

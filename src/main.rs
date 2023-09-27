@@ -10,9 +10,8 @@ use tokio::{
 use crate::{
     unit::{
         guard::GuardManager,
-        service::{loader::Service, Impl},
+        service::loader::load_service,
         store::{update_unit, UnitStore},
-        UnitImpl,
     },
     util::{
         dbus::{connect_dbus, DbusServer},
@@ -115,12 +114,4 @@ impl Actors {
             guard,
         }
     }
-}
-
-fn load_service(s: &str) -> UnitImpl<Impl> {
-    let t0 = s;
-    let t0: Service = toml::from_str(t0).unwrap();
-    dbg!(&t0);
-    let t0: UnitImpl<Impl> = t0.into();
-    dbg!(t0)
 }

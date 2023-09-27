@@ -11,6 +11,7 @@ pub(crate) mod service;
 pub(crate) mod socket;
 pub(crate) mod state;
 pub(crate) mod store;
+pub(crate) mod target;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum UnitKind {

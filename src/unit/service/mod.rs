@@ -107,7 +107,7 @@ impl Unit for UnitImpl<Impl> {
                     tokio::spawn(async move {
                         let exit_status = child.wait().await.unwrap();
                         if exit_status.success() {
-                            set_state(&state_manager, entry, State::Stopped).await
+                            set_state(&state_manager, entry, State::Active).await
                         } else {
                             set_state(&state_manager, entry, State::Failed).await
                         }
@@ -146,7 +146,20 @@ impl Unit for UnitImpl<Impl> {
             }
             Kind::Forking => todo!(),
             Kind::Oneshot => {
-                let child = run_cmd(&self.sub.exec_stop).unwrap().wait().await;
+                if self.sub.exec_stop.is_empty() {
+                    set_state(&state_manager, entry, State::Stopped).await;
+                } else {
+                    match run_cmd(&self.sub.exec_stop).unwrap().wait().await {
+                        Ok(exitcode) => {
+                            if exitcode.success() {
+                                set_state(&state_manager, entry, State::Stopped).await;
+                            } else {
+                                set_state(&state_manager, entry, State::Failed).await;
+                            }
+                        }
+                        Err(_) => todo!(),
+                    }
+                }
             }
             Kind::Notify => todo!(),
         }
@@ -161,36 +174,16 @@ impl Unit for UnitImpl<Impl> {
     }
 }
 
-fn run_cmd(exec_start: &str) -> Result<Child, io::Error> {
-    let mut s = exec_start.split_whitespace();
+fn run_cmd(cmd: &str) -> Result<Child, io::Error> {
+    let cmd = cmd.trim();
+    if cmd.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "empty command!",
+        ));
+    }
+    let mut s = cmd.split_whitespace();
     tokio::process::Command::new(s.next().unwrap())
         .args(s)
         .spawn()
-}
-
-impl UnitImpl<Impl> {
-    fn gen_test(
-        name: impl AsRef<str>,
-        deps: UnitDeps,
-        kind: Kind,
-        start: impl AsRef<str>,
-        stop: impl AsRef<str>,
-        restart: impl AsRef<str>,
-    ) -> Self {
-        let null_str: Rc<str> = "".into();
-        Self {
-            common: UnitCommon {
-                name: name.as_ref().into(),
-                description: null_str.clone(),
-                documentation: null_str.clone(),
-                deps: Rc::new(deps),
-            },
-            sub: Impl {
-                kind,
-                exec_start: start.as_ref().into(),
-                exec_stop: start.as_ref().into(),
-                exec_restart: start.as_ref().into(),
-            },
-        }
-    }
 }

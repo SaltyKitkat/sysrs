@@ -10,7 +10,10 @@ use super::{
 use crate::{
     fstab::{FsEntry, MountInfo},
     unit::{Unit, UnitKind},
-    util::mount::{mount, unmount},
+    util::{
+        loader::{empty_dep, empty_str},
+        mount::{mount, unmount},
+    },
     Rc,
 };
 
@@ -50,9 +53,9 @@ impl From<Impl> for UnitImpl<Impl> {
             .into();
         let common = UnitCommon {
             name,
-            description: String::new().into(),
-            documentation: String::new().into(),
-            deps: todo!(),
+            description: empty_str(),
+            documentation: empty_str(),
+            deps: empty_dep(),
         };
         Self { common, sub: value }
     }

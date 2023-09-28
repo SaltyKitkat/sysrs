@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
+use futures::{Stream, StreamExt};
 use tokio::{
     sync::mpsc::{Receiver, Sender},
     task::JoinHandle,
@@ -58,6 +59,11 @@ impl UnitStore {
                         println!("starting unit: {:?}", &entry);
                         if self.map.contains_key(&entry) {
                             // find deps
+                            let mut wants = self.find_wants(entry.clone()).await;
+                            while let Some(unit) = wants.pop() {
+                                unit.start(self.state_manager.clone(), self.guard_manager.clone())
+                                    .await;
+                            }
                             let mut requires = self.find_requires(entry).await;
                             while let Some(unit) = requires.pop() {
                                 unit.start(self.state_manager.clone(), self.guard_manager.clone())
@@ -108,6 +114,37 @@ impl UnitStore {
         }
         stack
     }
+
+    async fn find_wants(&mut self, entry: UnitEntry) -> Vec<UnitObj> {
+        let mut queue = VecDeque::new();
+        queue.push_back(entry);
+        let mut stack = Vec::new();
+        while let Some(e) = queue.pop_front() {
+            if get_state(&self.state_manager, e.clone())
+                .await
+                .is_inactive()
+            {
+                println!("finding wants...");
+                if let Some(unit) = self.map.get(&e) {
+                    let unit = unit.clone();
+                    let deps = unit.deps();
+                    for dep in deps.wants.iter().cloned() {
+                        println!("pushing {:?} into queue", &dep);
+                        queue.push_back(dep);
+                    }
+                    if stack
+                        .iter()
+                        .all(|u_in_stack| !Rc::ptr_eq(&unit, u_in_stack))
+                    {
+                        stack.push(unit);
+                    }
+                } else {
+                    todo!("handle misssing unit dep, missing: {e}")
+                }
+            }
+        }
+        stack
+    }
 }
 
 pub(crate) async fn update_unit(store: &Sender<Message>, unit: impl Unit + Send + Sync + 'static) {
@@ -116,6 +153,18 @@ pub(crate) async fn update_unit(store: &Sender<Message>, unit: impl Unit + Send 
         .send(Message::Update(entry, Rc::new(unit)))
         .await
         .unwrap();
+}
+
+pub(crate) async fn update_units(
+    store: &Sender<Message>,
+    units: impl Stream<Item = Rc<dyn Unit + Send + Sync + 'static>>,
+) {
+    units
+        .for_each_concurrent(None, |unit| async move {
+            let entry = UnitEntry::from(unit.as_ref());
+            store.send(Message::Update(entry, unit)).await.unwrap()
+        })
+        .await
 }
 
 pub(crate) async fn start_unit(store: &Sender<Message>, entry: UnitEntry) {

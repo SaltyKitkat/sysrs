@@ -4,7 +4,7 @@ use tokio::{io, process::Child, select, sync::mpsc::Sender};
 use super::{
     guard::{self, create_guard, guard_stop},
     state::{self, set_state_with_condition, State},
-    Unit, UnitCommon, UnitDeps, UnitEntry, UnitImpl, UnitKind,
+    Unit, UnitDeps, UnitEntry, UnitImpl, UnitKind,
 };
 use crate::{unit::state::set_state, Rc};
 

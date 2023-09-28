@@ -30,3 +30,7 @@ impl From<Socket> for UnitImpl<Impl> {
         }
     }
 }
+
+pub(crate) fn load_socket(s: &str) -> UnitImpl<Impl> {
+    toml::from_str::<Socket>(s).unwrap().into()
+}

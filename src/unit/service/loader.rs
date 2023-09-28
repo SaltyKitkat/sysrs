@@ -90,9 +90,5 @@ impl UnitDeps {
 }
 
 pub(crate) fn load_service(s: &str) -> UnitImpl<Impl> {
-    let t0 = s;
-    let t0: Service = toml::from_str(t0).unwrap();
-    dbg!(&t0);
-    let t0: UnitImpl<Impl> = t0.into();
-    dbg!(t0)
+    toml::from_str::<Service>(s).unwrap().into()
 }

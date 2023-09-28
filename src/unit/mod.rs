@@ -68,11 +68,9 @@ impl From<&str> for UnitEntry {
     }
 }
 
-impl<T: Unit> From<&T> for UnitEntry {
+impl<T: Unit + ?Sized> From<&T> for UnitEntry {
     fn from(value: &T) -> Self {
-        Self {
-            name: value.name().clone(),
-        }
+        Self { name: value.name() }
     }
 }
 

@@ -42,3 +42,9 @@ impl From<Target> for UnitImpl<Impl> {
         }
     }
 }
+
+pub(crate) fn load_target(s: &str) -> UnitImpl<Impl> {
+    // dbg!(&t);
+    toml::from_str::<Target>(s).unwrap().into()
+    // dbg!(t)
+}

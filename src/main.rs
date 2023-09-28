@@ -3,19 +3,18 @@ use std::time::Duration;
 use rustix::process;
 use tokio::{
     sync::mpsc::{channel, Sender},
-    task::yield_now,
     time::sleep,
 };
 
 use crate::{
     unit::{
         guard::GuardManager,
-        service::loader::load_service,
-        store::{update_unit, UnitStore},
+        store::{update_units, UnitStore},
     },
     util::{
         dbus::{connect_dbus, DbusServer},
         event::register_sig_handlers,
+        loader::load_units_from_dir,
     },
 };
 use unit::state::StateManager;
@@ -67,24 +66,8 @@ async fn async_main() {
         .await
         .unwrap();
     println!("before insert unit");
-    update_unit(
-        &actors.store,
-        load_service(include_str!("unit/service/t0.service")),
-    )
-    .await;
-    update_unit(
-        &actors.store,
-        load_service(include_str!("unit/service/t1.service")),
-    )
-    .await;
-    update_unit(
-        &actors.store,
-        load_service(include_str!("unit/service/sleep.service")),
-    )
-    .await;
+    update_units(&actors.store, load_units_from_dir("./units").await).await;
     println!("after insert unit");
-    yield_now().await;
-    yield_now().await;
     sleep(Duration::from_secs(300)).await;
     println!("tokio finished!");
 }

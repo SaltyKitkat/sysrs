@@ -23,4 +23,3 @@ where
     let sig = signal(signalkind).unwrap();
     tokio::spawn(handler(sig));
 }
-

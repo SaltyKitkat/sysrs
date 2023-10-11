@@ -1,13 +1,22 @@
 use async_trait::async_trait;
-use tokio::sync::mpsc::Sender;
 
-use super::{guard, state, Unit, UnitDeps, UnitImpl, UnitKind};
+use super::{state::State, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
 use crate::Rc;
 
 pub(crate) mod loader;
 
 #[derive(Debug)]
 pub(crate) struct Impl {}
+pub(super) struct Handle;
+#[async_trait]
+impl super::Handle for Handle {
+    async fn stop(self: Box<Self>) -> Result<(), UnitHandle> {
+        todo!()
+    }
+    async fn wait(&mut self) -> State {
+        todo!()
+    }
+}
 
 #[async_trait]
 impl Unit for UnitImpl<Impl> {
@@ -31,25 +40,15 @@ impl Unit for UnitImpl<Impl> {
         self.common.deps.clone()
     }
 
-    async fn start(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    ) {
+    async fn start(&self) -> Result<UnitHandle, ()> {
+        todo!()
     }
 
-    async fn stop(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    ) {
+    async fn stop(&self, handle: UnitHandle) -> Result<(), ()> {
+        todo!()
     }
 
-    async fn restart(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    ) {
+    async fn restart(&self, handle: UnitHandle) -> Result<UnitHandle, ()> {
         todo!()
     }
 }

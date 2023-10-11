@@ -5,11 +5,15 @@ use tokio::{
     sync::mpsc::{channel, Sender},
     time::sleep,
 };
+use unit::dep;
 
 use crate::{
     unit::{
-        guard::GuardManager,
-        store::{update_units, UnitStore},
+        dep::Dep,
+        guard::{self, GuardManager},
+        state::{self, StateManager},
+        store::{self, utils::start_unit, utils::update_units, UnitStore},
+        UnitEntry,
     },
     util::{
         dbus::{connect_dbus, DbusServer},
@@ -17,7 +21,6 @@ use crate::{
         loader::load_units_from_dir,
     },
 };
-use unit::state::StateManager;
 
 // type Rc<T> = std::rc::Rc<T>;
 type Rc<T> = std::sync::Arc<T>;
@@ -61,21 +64,24 @@ async fn async_main() {
     //     .await;
     // dbg!(store);
 
-    let actors = Actors::new();
-    let _conn = connect_dbus(DbusServer::new(actors.store.clone(), actors.state.clone()))
-        .await
-        .unwrap();
     println!("before insert unit");
     update_units(&actors.store, load_units_from_dir("./units").await).await;
     println!("after insert unit");
+    start_unit(&actors.store, UnitEntry::from("t0.service")).await;
+    // start_unit(&actors.store, UnitEntry::from("dbus-system.service")).await;
+    sleep(Duration::from_secs(3)).await;
+    // let _conn = connect_dbus(DbusServer::new(actors.store.clone(), actors.state.clone()))
+    //     .await
+    //     .unwrap();
     sleep(Duration::from_secs(300)).await;
     println!("tokio finished!");
 }
 
 pub(crate) struct Actors {
-    pub(crate) store: Sender<unit::store::Message>,
-    pub(crate) state: Sender<unit::state::Message>,
-    pub(crate) guard: Sender<unit::guard::Message>,
+    pub(crate) store: Sender<store::Message>,
+    pub(crate) state: Sender<state::Message>,
+    pub(crate) guard: Sender<guard::Message>,
+    pub(crate) dep: Sender<dep::Message>,
 }
 
 impl Actors {
@@ -86,15 +92,18 @@ impl Actors {
         let (store, store_rx) = channel(CHANNEL_LEN);
         let (state, state_rx) = channel(CHANNEL_LEN);
         let (guard, guard_rx) = channel(CHANNEL_LEN);
+        let (dep, dep_rx) = channel(CHANNEL_LEN);
 
-        UnitStore::new(state.clone(), guard.clone()).run(store_rx);
-        StateManager::new().run(state_rx);
+        UnitStore::new(state.clone(), guard.clone(), dep.clone()).run(store_rx);
+        StateManager::new(dep.clone()).run(state_rx);
         GuardManager::new(guard.clone(), store.clone(), state.clone()).run(guard_rx);
+        Dep::new(guard.clone()).run(dep_rx);
 
         Self {
             store,
             state,
             guard,
+            dep,
         }
     }
 }

@@ -1,10 +1,12 @@
 use std::fmt::{Debug, Display};
 
 use async_trait::async_trait;
-use tokio::sync::mpsc::Sender;
 
 use crate::Rc;
 
+use self::state::State;
+
+pub(crate) mod dep;
 pub(crate) mod guard;
 pub(crate) mod mount;
 pub(crate) mod service;
@@ -75,6 +77,13 @@ impl<T: Unit + ?Sized> From<&T> for UnitEntry {
 }
 
 #[async_trait]
+pub(crate) trait Handle: Send {
+    async fn stop(self: Box<Self>) -> Result<(), UnitHandle>;
+    async fn wait(&mut self) -> State;
+}
+type UnitHandle = Box<dyn Handle>;
+
+#[async_trait]
 pub(crate) trait Unit: Debug {
     fn name(&self) -> Rc<str>;
     fn description(&self) -> Rc<str>;
@@ -83,21 +92,9 @@ pub(crate) trait Unit: Debug {
 
     fn deps(&self) -> Rc<UnitDeps>;
 
-    async fn start(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    );
-    async fn stop(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    );
-    async fn restart(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    );
+    async fn start(&self) -> Result<UnitHandle, ()>; // todo: error type
+    async fn stop(&self, handle: UnitHandle) -> Result<(), ()>;
+    async fn restart(&self, handle: UnitHandle) -> Result<UnitHandle, ()>;
 }
 
 #[derive(Debug)]

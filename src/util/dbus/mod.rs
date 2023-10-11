@@ -5,7 +5,7 @@ use zbus::{dbus_interface, Connection, ConnectionBuilder};
 
 use crate::unit::{
     state::{self, print_state, register_state_monitor, State},
-    store::{self, print_store, start_unit, stop_unit},
+    store::{self, utils::print_store, utils::start_unit, utils::stop_unit},
     UnitEntry,
 };
 
@@ -65,7 +65,8 @@ impl DbusServer {
 }
 
 pub(crate) async fn connect_dbus(server: DbusServer) -> zbus::Result<Connection> {
-    ConnectionBuilder::session()?
+    ConnectionBuilder::system()
+        .unwrap()
         .name("org.sysrs.sysrs1")?
         .serve_at("/org/sysrs/sysrs1", server)?
         .build()

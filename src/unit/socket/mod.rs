@@ -1,23 +1,27 @@
 use std::{os::unix::net::UnixListener, path::Path};
 
 use async_trait::async_trait;
-use tokio::{io::unix::AsyncFd, select, sync::mpsc::Sender};
+use tokio::io::unix::AsyncFd;
 
-use super::{
-    guard::{self, guard_stop},
-    state::{self, set_state_with_condition},
-    Unit, UnitDeps, UnitEntry, UnitImpl, UnitKind,
-};
-use crate::{
-    unit::{guard::create_guard, state::State, store::start_unit},
-    Rc,
-};
+use super::{state::State, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
+use crate::Rc;
 
 pub(crate) mod loader;
 
 #[derive(Debug)]
 pub(crate) struct Impl {
     path: Rc<Path>,
+}
+
+pub(super) struct Handle();
+#[async_trait]
+impl super::Handle for Handle {
+    async fn stop(self: Box<Self>) -> Result<(), UnitHandle> {
+        todo!()
+    }
+    async fn wait(&mut self) -> State {
+        todo!()
+    }
 }
 
 #[async_trait]
@@ -42,63 +46,42 @@ impl Unit for UnitImpl<Impl> {
         todo!()
     }
 
-    async fn start(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    ) {
-        let entry = UnitEntry::from(self);
-        match set_state_with_condition(&state_manager, entry.clone(), state::State::Starting, |s| {
-            s.is_inactive()
-        })
-        .await
-        {
-            Ok(_) => (),
-            Err(_) => return,
-        };
+    async fn start(&self) -> Result<UnitHandle, ()> {
         let socket = UnixListener::bind(self.sub.path.as_ref()).unwrap();
         let fd = AsyncFd::new(socket).unwrap();
-        create_guard(&guard_manager, entry.clone(), |store, mut rx| async move {
-            loop {
-                select! {
-                    read_ready = fd.readable() => {
-                        read_ready.unwrap().retain_ready();
-                        start_unit(&store, entry.clone()).await;
-                    },
-                    msg = rx.recv() =>  match msg.unwrap() {
-                        guard::GMessage::Stop | guard::GMessage::Kill => {
-                            drop(fd);
-                            break State::Stopped;
-                        },
-                    }
-                }
-            }
-        })
-        .await
-    }
-
-    async fn stop(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    ) {
-        let entry = UnitEntry::from(self);
-        match set_state_with_condition(&state_manager, entry.clone(), state::State::Stopping, |s| {
-            s.is_active()
-        })
-        .await
-        {
-            Ok(s) => (),
-            Err(s) => todo!(),
-        }
-        guard_stop(&guard_manager, entry).await
-    }
-
-    async fn restart(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    ) {
+        // create_guard(
+        //     &guard_manager,
+        //     entry.clone(),
+        //     |store, state, mut rx| async move {
+        //         loop {
+        //             select! {
+        //                 read_ready = fd.readable() => {
+        //                     read_ready.unwrap().retain_ready();
+        //                     start_unit(&store, entry.clone()).await;
+        //                 },
+        //                 msg = rx.recv() => match msg.unwrap() {
+        //                     guard::GuardMessage::Stop | guard::GuardMessage::Kill => {
+        //                         drop(fd);
+        //                         break State::Stopped;
+        //                     }
+        //                     guard::GuardMessage::RequiresReady | guard::GuardMessage::AftersReady => {
+        //                         todo!()
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     },
+        // )
+        // .await
         todo!()
+    }
+
+    async fn stop(&self, handle: UnitHandle) -> Result<(), ()> {
+        handle.stop().await.or(Err(()))
+    }
+
+    async fn restart(&self, handle: UnitHandle) -> Result<UnitHandle, ()> {
+        self.stop(handle).await?;
+        self.start().await
     }
 }

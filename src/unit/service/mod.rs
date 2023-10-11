@@ -1,12 +1,9 @@
 use async_trait::async_trait;
-use tokio::{io, process::Child, select, sync::mpsc::Sender};
+use futures::future::pending;
+use tokio::{io, process::Child};
 
-use super::{
-    guard::{self, create_guard, guard_stop},
-    state::{self, set_state_with_condition, State},
-    Unit, UnitDeps, UnitEntry, UnitImpl, UnitKind,
-};
-use crate::{unit::state::set_state, Rc};
+use super::{state::State, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
+use crate::Rc;
 
 pub(crate) mod loader;
 
@@ -18,7 +15,36 @@ pub(crate) enum Kind {
     Notify,
 }
 
-#[derive(Debug)]
+pub(crate) enum Handle {
+    Process(tokio::process::Child),
+    Empty,
+}
+#[async_trait]
+impl super::Handle for Handle {
+    async fn stop(mut self: Box<Self>) -> Result<(), UnitHandle> {
+        match self.as_mut() {
+            Handle::Process(child) => child.kill().await.or(Err(self)),
+            Handle::Empty => Ok(()),
+        }
+    }
+    async fn wait(&mut self) -> State {
+        match self {
+            Handle::Process(child) => match child.wait().await {
+                Ok(exitcode) => {
+                    if exitcode.success() {
+                        State::Stopped
+                    } else {
+                        State::Failed
+                    }
+                }
+                Err(_) => todo!(),
+            },
+            Handle::Empty => pending::<State>().await,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct Impl {
     kind: Kind,
     exec_start: Rc<str>,
@@ -59,102 +85,27 @@ impl Unit for UnitImpl<Impl> {
         self.common.deps.clone()
     }
 
-    async fn start(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    ) {
-        // todo: send job to job manager and let it to set state due to job status
-        // unit status is expected to be starting here
+    async fn start(&self) -> Result<UnitHandle, ()> {
         let kind = self.sub.kind;
-        let entry = UnitEntry::from(self);
-        match set_state_with_condition(&state_manager, entry.clone(), State::Starting, |s| {
-            s.is_inactive()
-        })
-        .await
-        {
-            Ok(_) => (),
-            Err(_) => todo!(),
-        }
-        match run_cmd(&self.sub.exec_start) {
-            Ok(mut child) => match kind {
-                Kind::Simple => {
-                    set_state(&state_manager, entry.clone(), State::Active).await;
-                    println!("simple service: state set!");
-                    create_guard(&guard_manager, entry.clone(), |store, mut rx| async move {
-                        select! {
-                            exit_status = child.wait() => {
-                                let exit_status = exit_status.unwrap();
-                                if exit_status.success() {
-                                    State::Stopped
-                                } else {
-                                    State::Failed
-                                }
-                            },
-                            msg = rx.recv() => {
-                                match msg.unwrap() {
-                                    guard::GMessage::Stop => todo!(),
-                                    guard::GMessage::Kill => child.kill().await.unwrap(),
-                                }
-                                State::Stopped
-                            }
-                        }
-                    })
-                    .await;
-                }
-                Kind::Forking => todo!(),
-                Kind::Oneshot => {
-                    tokio::spawn(async move {
-                        let exit_status = child.wait().await.unwrap();
-                        if exit_status.success() {
-                            set_state(&state_manager, entry, State::Active).await
-                        } else {
-                            set_state(&state_manager, entry, State::Failed).await
-                        }
-                    });
-                }
-                Kind::Notify => todo!(),
-            },
-            Err(_) => {
-                set_state_with_condition(&state_manager, entry, State::Failed, |s| {
-                    s == State::Starting
-                })
-                .await
-                .expect("previous state should be `Starting`");
-            }
-        }
-    }
-
-    async fn stop(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    ) {
-        let entry = UnitEntry::from(self);
-        match set_state_with_condition(&state_manager, entry.clone(), State::Stopping, |s| {
-            s.is_active()
-        })
-        .await
-        {
-            Ok(_) => (),
-            Err(_) => todo!(),
-        }
-
-        match self.sub.kind {
+        match kind {
             Kind::Simple => {
-                guard_stop(&guard_manager, entry).await;
+                let exec_start = self.sub.exec_start.clone();
+                match run_cmd(&exec_start) {
+                    Ok(child) => Ok(Box::new(Handle::Process(child))),
+                    Err(_) => Err(()),
+                }
             }
             Kind::Forking => todo!(),
             Kind::Oneshot => {
-                if self.sub.exec_stop.is_empty() {
-                    set_state(&state_manager, entry, State::Stopped).await;
+                if self.sub.exec_start.is_empty() {
+                    todo!()
                 } else {
-                    match run_cmd(&self.sub.exec_stop).unwrap().wait().await {
+                    match run_cmd(&self.sub.exec_start).unwrap().wait().await {
                         Ok(exitcode) => {
                             if exitcode.success() {
-                                set_state(&state_manager, entry, State::Stopped).await;
+                                Ok(Box::new(Handle::Empty))
                             } else {
-                                set_state(&state_manager, entry, State::Failed).await;
+                                Err(())
                             }
                         }
                         Err(_) => todo!(),
@@ -165,12 +116,42 @@ impl Unit for UnitImpl<Impl> {
         }
     }
 
-    async fn restart(
-        &self,
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    ) {
-        todo!()
+    async fn stop(&self, handle: UnitHandle) -> Result<(), ()> {
+        // let entry = UnitEntry::from(self);
+        // match set_state_with_condition(&state_manager, entry.clone(), State::Stopping, |s| {
+        //     s.is_active()
+        // })
+        // .await
+        // {
+        //     Ok(_) => (),
+        //     Err(_) => todo!(),
+        // }
+        match self.sub.kind {
+            Kind::Simple => handle.stop().await.or(Err(())),
+            Kind::Forking => todo!(),
+            Kind::Oneshot => {
+                if self.sub.exec_stop.is_empty() {
+                    Ok(())
+                } else {
+                    match run_cmd(&self.sub.exec_stop).unwrap().wait().await {
+                        Ok(exitcode) => {
+                            if exitcode.success() {
+                                Ok(())
+                            } else {
+                                Err(())
+                            }
+                        }
+                        Err(_) => todo!(),
+                    }
+                }
+            }
+            Kind::Notify => todo!(),
+        }
+    }
+
+    async fn restart(&self, handle: UnitHandle) -> Result<UnitHandle, ()> {
+        self.stop(handle).await?;
+        self.start().await
     }
 }
 

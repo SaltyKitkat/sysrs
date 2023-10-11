@@ -13,7 +13,7 @@ use super::{
 
 #[derive(Debug, Clone)]
 pub(crate) struct GuardManager {
-    map: HashMap<UnitEntry, Sender<GMessage>>,
+    map: HashMap<UnitEntry, Sender<GuardMessage>>,
     self_: Sender<Message>,
     store: Sender<store::Message>,
     state: Sender<state::Message>,
@@ -23,14 +23,18 @@ pub(crate) enum Message {
     Update(
         UnitEntry,
         Box<
-            dyn FnOnce(Sender<store::Message>, Receiver<GMessage>) -> BoxFuture<'static, State>
+            dyn FnOnce(
+                    Sender<store::Message>,
+                    Sender<state::Message>,
+                    Receiver<GuardMessage>,
+                ) -> BoxFuture<'static, State>
                 + Send
                 + 'static,
         >,
     ),
     Remove(UnitEntry),
+    DepsReady(UnitEntry),
     Stop(UnitEntry),
-    Kill(UnitEntry),
 }
 
 impl GuardManager {
@@ -53,7 +57,7 @@ impl GuardManager {
                 match msg {
                     Message::Update(u, s) => {
                         let (sender, recevier) = mpsc::channel(4);
-                        let f = s(self.store.clone(), recevier);
+                        let f = s(self.store.clone(), self.state.clone(), recevier);
                         self.map.insert(u.clone(), sender);
                         let sender = self.self_.clone();
                         let state = self.state.clone();
@@ -67,41 +71,44 @@ impl GuardManager {
                     Message::Remove(u) => {
                         self.map.remove(&u);
                     }
+                    Message::DepsReady(u) => {
+                        self.map
+                            .get(&u)
+                            .unwrap()
+                            .send(GuardMessage::DepsReady)
+                            .await
+                            .unwrap();
+                    }
                     Message::Stop(u) => {
                         self.map
                             .get(&u)
                             .unwrap()
-                            .send(GMessage::Stop)
+                            .send(GuardMessage::Stop)
                             .await
                             .unwrap();
                     }
-                    Message::Kill(u) => self
-                        .map
-                        .get(&u)
-                        .unwrap()
-                        .send(GMessage::Kill)
-                        .await
-                        .unwrap(),
                 }
             }
         })
     }
 }
 
-pub(crate) enum GMessage {
+pub(crate) enum GuardMessage {
+    DepsReady,
     Stop,
-    Kill,
 }
 
 pub(crate) async fn create_guard<F, Fut>(guard_manager: &Sender<Message>, u: UnitEntry, f: F)
 where
-    F: FnOnce(Sender<store::Message>, Receiver<GMessage>) -> Fut + Send + 'static,
+    F: FnOnce(Sender<store::Message>, Sender<state::Message>, Receiver<GuardMessage>) -> Fut
+        + Send
+        + 'static,
     Fut: Future<Output = State> + Send + 'static,
 {
     guard_manager
         .send(Message::Update(
             u,
-            Box::new(|store, rx| Box::pin(f(store, rx))),
+            Box::new(|store, state, rx| Box::pin(f(store, state, rx))),
         ))
         .await
         .unwrap();

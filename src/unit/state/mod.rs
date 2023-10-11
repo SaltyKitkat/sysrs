@@ -11,7 +11,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::UnitEntry;
+use super::{dep, UnitEntry};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum State {
@@ -47,7 +47,7 @@ impl State {
             State::Active => true,
         }
     }
-    pub(crate) fn is_inactive(&self) -> bool {
+    pub(crate) fn is_dead(&self) -> bool {
         match self {
             State::Starting | State::Active | State::Stopping => false,
             State::Uninit | State::Stopped | State::Failed => true,
@@ -57,10 +57,11 @@ impl State {
 
 type MonitorRet = oneshot::Sender<Result<State, State>>;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct StateManager {
     state: HashMap<UnitEntry, State>,
     monitor: HashMap<UnitEntry, Vec<MonitorRet>>,
+    dep: Sender<dep::Message>,
 }
 
 pub(crate) enum Message {
@@ -80,61 +81,66 @@ pub(crate) enum Message {
 }
 
 impl StateManager {
-    pub(crate) fn new() -> Self {
-        Default::default()
+    pub(crate) fn new(dep: Sender<dep::Message>) -> Self {
+        Self {
+            state: Default::default(),
+            monitor: Default::default(),
+            dep,
+        }
     }
 
     pub(crate) fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
         tokio::task::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                self.serve(msg);
+                let ref mut this = self;
+                match msg {
+                    Message::DbgPrint => println!("{:#?}", this.state),
+                    Message::Get(entry, s) => {
+                        if let Some(&state) = this.state.get(&entry) {
+                            s.send(state).ok();
+                        } else {
+                            s.send(State::Uninit).ok();
+                        }
+                    }
+                    Message::Monitor { entry, s, cond } => {
+                        let state = this.state.get(&entry).copied().unwrap_or_default();
+                        if cond(state) {
+                            match this.monitor.entry(entry) {
+                                Entry::Occupied(mut o) => {
+                                    o.get_mut().push(s);
+                                }
+                                Entry::Vacant(v) => {
+                                    v.insert(vec![s]);
+                                }
+                            }
+                        } else {
+                            s.send(Err(state)).unwrap();
+                        }
+                    }
+                    Message::Set(entry, new_state) => this.set(entry, new_state).await,
+                    Message::SetWithCondition {
+                        entry,
+                        new_state,
+                        condition,
+                    } => {
+                        let old_state = this.state.get(&entry).unwrap_or(&State::Uninit);
+                        if condition(*old_state) {
+                            this.set(entry, new_state).await;
+                        }
+                    }
+                }
             }
         })
     }
 
-    fn serve(&mut self, msg: Message) {
-        match msg {
-            Message::DbgPrint => println!("{:#?}", self.state),
-            Message::Get(entry, s) => {
-                if let Some(&state) = self.state.get(&entry) {
-                    s.send(state).ok();
-                } else {
-                    s.send(State::Uninit).ok();
-                }
-            }
-            Message::Monitor { entry, s, cond } => {
-                let state = self.state.get(&entry).copied().unwrap_or_default();
-                if cond(state) {
-                    match self.monitor.entry(entry) {
-                        Entry::Occupied(mut o) => {
-                            o.get_mut().push(s);
-                        }
-                        Entry::Vacant(v) => {
-                            v.insert(vec![s]);
-                        }
-                    }
-                } else {
-                    s.send(Err(state)).unwrap();
-                }
-            }
-            Message::Set(entry, new_state) => self.set(entry, new_state),
-            Message::SetWithCondition {
-                entry,
-                new_state,
-                condition,
-            } => {
-                let old_state = self.state.get(&entry).unwrap_or(&State::Uninit);
-                if condition(*old_state) {
-                    self.set(entry, new_state);
-                }
-            }
-        }
-    }
-
-    fn set(&mut self, entry: UnitEntry, state: State) {
+    async fn set(&mut self, entry: UnitEntry, state: State) {
         println!("setting state: `{entry}` to `{state}`");
         self.trigger_monitors(&entry, state);
-        self.state.insert(entry, state);
+        self.state.insert(entry.clone(), state);
+        self.dep
+            .send(dep::Message::StateChange(entry, state))
+            .await
+            .unwrap()
     }
 
     fn trigger_monitors(&mut self, entry: &UnitEntry, new_state: State) {

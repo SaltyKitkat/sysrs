@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use futures::future::pending;
 use rustix::fs::{MountFlags, UnmountFlags};
 
-use super::{state::State, UnitCommon, UnitDeps, UnitEntry, UnitHandle, UnitImpl};
+use super::{state::State, UnitCommon, UnitDeps, UnitHandle, UnitImpl};
 use crate::{
     fstab::{FsEntry, MountInfo},
     unit::{Unit, UnitKind},
@@ -12,19 +12,6 @@ use crate::{
     },
     Rc,
 };
-
-// #[derive(Debug, Clone)]
-// pub struct Impl {
-//     inner: Rc<ImplInner>,
-// }
-//
-// #[derive(Debug)]
-// struct ImplInner {
-//     what: Box<Path>,
-//     where_: Box<Path>,
-//     type_: Box<str>,
-//     options: Box<str>,
-// }
 
 pub(crate) type Impl = Rc<MountInfo>;
 pub(super) struct Handle;
@@ -37,7 +24,7 @@ impl super::Handle for Handle {
     }
     async fn wait(&mut self) -> State {
         // todo: monitor mount point
-        pending::<State>().await // never return
+        pending().await // never return
     }
 }
 
@@ -101,14 +88,13 @@ impl Unit for UnitImpl<Impl> {
             sub: mount_info,
         } = self;
         let mount_info = mount_info.clone();
-        let entry = UnitEntry::from(self);
         match tokio::task::block_in_place(|| mount(mount_info, MountFlags::empty())) {
             Ok(_) => Ok(Box::new(Handle)),
             Err(_) => Err(()),
         }
     }
 
-    async fn stop(&self, handle: UnitHandle) -> Result<(), ()> {
+    async fn stop(&self, _: UnitHandle) -> Result<(), ()> {
         let Self {
             common: _,
             sub: mount_info,

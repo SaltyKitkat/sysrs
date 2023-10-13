@@ -1,6 +1,7 @@
 use std::{os::unix::net::UnixListener, path::Path};
 
 use async_trait::async_trait;
+use futures::future::pending;
 use tokio::io::unix::AsyncFd;
 
 use super::{state::State, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
@@ -13,14 +14,16 @@ pub(crate) struct Impl {
     path: Rc<Path>,
 }
 
-pub(super) struct Handle();
+pub(super) struct Handle;
+
 #[async_trait]
 impl super::Handle for Handle {
     async fn stop(self: Box<Self>) -> Result<(), UnitHandle> {
-        todo!()
+        Ok(())
     }
     async fn wait(&mut self) -> State {
-        todo!()
+        // todo: monitor socket state
+        pending().await
     }
 }
 

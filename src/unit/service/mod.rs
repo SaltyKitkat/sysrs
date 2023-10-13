@@ -39,7 +39,7 @@ impl super::Handle for Handle {
                 }
                 Err(_) => todo!(),
             },
-            Handle::Empty => pending::<State>().await,
+            Handle::Empty => pending().await,
         }
     }
 }
@@ -117,15 +117,6 @@ impl Unit for UnitImpl<Impl> {
     }
 
     async fn stop(&self, handle: UnitHandle) -> Result<(), ()> {
-        // let entry = UnitEntry::from(self);
-        // match set_state_with_condition(&state_manager, entry.clone(), State::Stopping, |s| {
-        //     s.is_active()
-        // })
-        // .await
-        // {
-        //     Ok(_) => (),
-        //     Err(_) => todo!(),
-        // }
         match self.sub.kind {
             Kind::Simple => handle.stop().await.or(Err(())),
             Kind::Forking => todo!(),

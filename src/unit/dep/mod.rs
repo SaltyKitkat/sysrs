@@ -59,8 +59,10 @@ struct ReverseDepInfo {
 }
 
 pub(crate) enum Message {
+    /// 增加一项等待启动的Unit
     Insert(UnitEntry, Rc<UnitDeps>),
-    StateChange(UnitEntry, State), // (entry, new_state)
+    /// 收到通知事件：指定Unit的状态发生改变
+    StateChange(UnitEntry, State),
 }
 pub(crate) struct Dep {
     map: HashMap<UnitEntry, DepInfo>,

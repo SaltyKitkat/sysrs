@@ -2,7 +2,7 @@
 
 - For never changed slices, use `Rc<[T]>` (or `Rc<str>`, `Rc<Path>`);
   `Rc` is `Arc` or `Rc`, controlled by type alias.
-- For io operations, use async;
+- Use async for IO operations;
 - For other blocking operations, use `spawn_blocking`;
 - why use `rustix` rather than `libc` and `nix`
   - rustc use this
@@ -59,130 +59,202 @@
   配置文件解析器：`File -> impl Unit`
   特性：使用基于tokio的异步io
 
-- Unit store：存储unit静态信息
-  `insert/update: (&mut UnitStore, dyn Unit) -> ()`
-  `get: (&UnitStore, key: Unitkey) -> &dyn Unit`
-  store
-    - Actor
-    - 在Unit自身的start/stop/restart任务前后插入状态检测与转换
+- Actors
+  - Dep
+    - 运行时进行依赖关系的暂存与等待，保证各个Unit按预期顺序启动
+    - api
+    ```rust
+    pub(crate) enum Message {
+        /// 增加一项等待启动的Unit
+        Insert(UnitEntry, Rc<UnitDeps>),
+        /// 收到通知事件：指定Unit的状态发生改变
+        StateChange(UnitEntry, State),
+    }
+    ```
+    - 引用的其他actor
+      - Guard
+  - Guard
+    - 储存Unit的运行时守护task
+    - api
+    ```rust
+    pub(crate) enum Message {
+        /// Insert a guard.
+        Insert(
+            UnitEntry,
+            Box<
+                dyn FnOnce(
+                        Sender<store::Message>,
+                        Sender<state::Message>,
+                        Receiver<GuardMessage>,
+                    ) -> BoxFuture<'static, State>
+                    + Send
+                    + 'static,
+            >, // todo: guard refactor
+        ),
+        /// remove a guard \
+        /// usually called by self when a gurad quits
+        Remove(UnitEntry),
+        /// notice all deps are ready for a specific unit \
+        /// called by `Dep`
+        DepsReady(UnitEntry),
+        /// Send a Stop message to the specific unit guard
+        Stop(UnitEntry),
+    }
+    ```
+    - 引用的其他actor
+      - Guard(self)
+      - Store
+      - State
+  - State
+    - 储存Unit的状态信息。目前的状态如下：
+    ```rust
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+    pub enum State {
+        #[default]
+        Uninit = 0,
+        Stopped,
+        Failed,
+        Starting,
+        Active,
+        Stopping,
+    }
+    ```
+    - api
+    ```rust
+    pub(crate) enum Message {
+        /// 打印内部信息，用于调试
+        DbgPrint,
+        /// 获得指定Unit的状态
+        Get(UnitEntry, oneshot::Sender<State>),
+        /// 注册一个hook,用于监听特性unit的状态改变 \
+        /// 是一个坏的api：由于unit start之后，set state的时机无法确定， \
+        ///     因此想要在start一类操作之后获得state作为结果的情景无法使用此api实现
+        Monitor {
+            entry: UnitEntry,
+            s: MonitorRet,
+            cond: Box<dyn FnOnce(State) -> bool + Send + 'static>,
+        },
+        /// 无条件设置指定Unit的状态
+        Set(UnitEntry, State),
+        /// 以当前状态作为条件决定是否设置指定Unit状态 \
+        /// 一定程度上相当于对指定Unit的状态进行CAS原子操作
+        SetWithCondition {
+            entry: UnitEntry,
+            new_state: State,
+            condition: Box<dyn FnOnce(State) -> bool + Send + 'static>,
+        },
+    }
+    ```
+    - 引用的其他actor
+      - Dep
 
-- Jobmanager：触发job运行，触发相应unit进行状态转换，并向monitor提交监控信息
-  - Job 类型：
-    - Cmd
-    - Blocking
-    - Async
+  - UnitStore
+    - 存储Unit静态信息，并负责Unit的start, stop, restart等动作的发出，以及依赖解析
+    - api
+    ```rust
+    pub(crate) enum Message {
+        /// 用于调试 打印内部信息
+        DbgPrint,
+        /// 用于更新/插入对应Unit的静态信息
+        Update(UnitEntry, UnitObj),
+        /// 移除Store中的指定Unit
+        Remove(UnitEntry),
+        /// 启动指定Unit
+        Start(UnitEntry),
+        /// 停止指定Unit
+        Stop(UnitEntry),
+        /// 重启指定Unit
+        Restart(UnitEntry),
+    }
+    ```
+    - 引用的其他actor
+      - State
+      - Guard
+      - Dep
 
-- 依赖管理：按需(?)解算依赖，并控制依次启动/停止/重启等，并按需注册状态监视
+<!-- - 依赖管理：按需(?)解算依赖，并控制依次启动/停止/重启等，并按需注册状态监视
   - 需要大量访问unit store数据，可以使之与unit store在同一线程，或是作为unitstore的插件
   - 实现：
     - 无状态：简单的依赖解算
       利用队列与栈，按照依赖树顺序启动unit, 并去重
-      `fn(UnitEntry, cond:FnMut(UnitEntry) -> bool, op: FnMut(UnitEntry))`
+      `fn(UnitEntry, cond:FnMut(UnitEntry) -> bool, op: FnMut(UnitEntry))` -->
 
-- 状态管理器：记录、调整并监视unit运行时状态信息
+<!-- - 状态管理器：记录、调整并监视unit运行时状态信息
   - RtStatus
     - status: Running, Stopped, Stopping, Starting, Failed ...
-    - monitor handle
+    - monitor handle -->
 
-- monitor: 事件驱动 异步
+<!-- - monitor: 事件驱动 异步 -->
 - signal handler
   - 利用tokio自带机制完成注册
   - 对于一个signal, 由于在tokio里面可以使用stream的形式处理，因此我们很容易得到以下注册方式：
     ```rust
-    fn register_signal_handler<F, H>(signalkind: SignalKind, handler: H)
+    fn register_signal_handler<F>(signalkind: SignalKind, mut handler: F)
     where
-        F: Future<Output = ()> + Send + 'static,
-        H: FnOnce(Signal) -> F,
+        F: FnMut() + Send + 'static,
     {
-        let sig = signal(signalkind).unwrap();
-        tokio::spawn(handler(sig));
-    }
-
-    ```
-    其中 `handler`形式如下：
-    ```rust
-    let handler = |mut signal| async move {
-      // init here
-      loop {
-        signal.recv().await;
-        // handle signal here
-      }
-    };
-    ```
-
-    运行时： signal发生 -> wait -> find pid and status -> find the event in monitor and trigger it
-    注册时： action -> register events of the service/unit
-
-    ```rust
-    enum Event {
-      SigChld(Pid, WaitStatus),
+        let mut sig = signal(signalkind).unwrap();
+        tokio::spawn(async move {
+            loop {
+                sig.recv().await;
+                handler();
+            }
+        });
     }
     ```
-    EventSources --mpsc-> EventHandler --mpsc-> EventConsumers(Monitor)
+    其中 `handler`在每次收到后会被调用。作为信号处理函数，其内部逻辑应当尽可能避免阻塞。
 
 # units
 
+接口定义：
 ```rust
-pub trait Unit {
+#[async_trait]
+pub(crate) trait Unit: Debug {
     fn name(&self) -> Rc<str>;
-    // fn description(&self) -> Rc<str>;
-    // fn documentation(&self) -> Rc<str>;
-
-    // Kinds:
-    // mount
-    // service
-    // timer
-    // socket
-    // target
+    fn description(&self) -> Rc<str>;
+    fn documentation(&self) -> Rc<str>;
     fn kind(&self) -> UnitKind;
 
-    fn deps(&self) -> UnitDeps;
+    fn deps(&self) -> Rc<UnitDeps>;
 
-    fn start(&self， job_manager);
-    fn stop(&self, job_manager);
-    fn restart(&self, job_manager);
+    /// start the unit, return a handle which
+    /// contains runtime info needed for monitor and stop/kill
+    async fn start(&self) -> Result<UnitHandle, ()>; // todo: error type
+
+    /// do things needed to stop the unit
+    async fn stop(&self, handle: UnitHandle) -> Result<(), ()>;
+
+    async fn restart(&self, handle: UnitHandle) -> Result<UnitHandle, ()>;
+}
+
+#[derive(Debug)]
+pub(crate) struct UnitImpl<KindImpl> {
+    pub common: UnitCommon,
+    pub sub: KindImpl,
 }
 ```
 
-dbus
-  [ ] zbus server && client
+# TODO：
 
-依赖解析：
-    双向依赖：requires && required_by
-    加载配置文件时建立依赖图
+- [ ] make Sender<Message> a handle type, make Message private
+- [ ] Unify Naming
+	eg:
+	UnitStore -> Store
+	Dep -> ???
+	GuardManager -> Guard
+- [ ] refactor guard code
+  给Guard一个类型，而不是现在的Box<dyn FnOnce(Sender<store::Message>, Sender<state::Message>, Receiver<GuardMessage>) -> BoxFuture<'static, State> + Send + 'static>
+	
+- [ ] remove all magic numbers and use const instead
+- [ ] logging
+- [ ] Error handle
 
-unit 启动：
-    使用workqueue
-        递归解算依赖并插入
-          重复添加依赖问题
-            [ ] 执行任务前检查unit状态
-            性能问题
-
-
-service:
-    使用tokio异步创建进程与指令运行
-    简单的状态转换（running/stopped）
-      on start: stopped -> running
-      on stop: running -> stopped
-    [ ] 进程的监控
-      on fail: running -> failed
-
-workqueue:
-    实现异步&&并发启动
-      任务插入过程非阻塞
-      
-    默认依赖之间进行串行启动
-    todo: 特殊unit：socket 自动拉起service
-
-unit状态监控
-    使用cgroup进行状态管理？
-
-
-# 一些细节：
 
 ## signals
 
 - [ ] handle signals (references: sysmaster, systemd)
+  - [x] impl signal handler
+  - [ ] handle signals like sysmaster and systemd
 
 ## units
 - mount & swap

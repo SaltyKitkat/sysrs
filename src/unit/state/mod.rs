@@ -57,27 +57,35 @@ impl State {
 
 type MonitorRet = oneshot::Sender<Result<State, State>>;
 
-#[derive(Debug)]
-pub(crate) struct StateManager {
-    state: HashMap<UnitEntry, State>,
-    monitor: HashMap<UnitEntry, Vec<MonitorRet>>,
-    dep: Sender<dep::Message>,
-}
-
 pub(crate) enum Message {
+    /// 打印内部信息，用于调试
     DbgPrint,
+    /// 获得指定Unit的状态
     Get(UnitEntry, oneshot::Sender<State>),
+    /// 注册一个hook,用于监听特性unit的状态改变 \
+    /// 是一个坏的api：由于unit start之后，set state的时机无法确定， \
+    ///     因此想要在start一类操作之后获得state作为结果的情景无法使用此api实现
     Monitor {
         entry: UnitEntry,
         s: MonitorRet,
         cond: Box<dyn FnOnce(State) -> bool + Send + 'static>,
     },
+    /// 无条件设置指定Unit的状态
     Set(UnitEntry, State),
+    /// 以当前状态作为条件决定是否设置指定Unit状态 \
+    /// 一定程度上相当于对指定Unit的状态进行CAS原子操作
     SetWithCondition {
         entry: UnitEntry,
         new_state: State,
         condition: Box<dyn FnOnce(State) -> bool + Send + 'static>,
     },
+}
+
+#[derive(Debug)]
+pub(crate) struct StateManager {
+    state: HashMap<UnitEntry, State>,
+    monitor: HashMap<UnitEntry, Vec<MonitorRet>>,
+    dep: Sender<dep::Message>,
 }
 
 impl StateManager {
@@ -133,6 +141,7 @@ impl StateManager {
         })
     }
 
+    /// 设置unit状态时统一使用此api,以触发monitor
     async fn set(&mut self, entry: UnitEntry, state: State) {
         println!("setting state: `{entry}` to `{state}`");
         self.trigger_monitors(&entry, state);

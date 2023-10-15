@@ -1,4 +1,4 @@
-use futures::{future::Either, Stream, StreamExt};
+use futures::{Stream, StreamExt};
 use tokio::{select, sync::mpsc::Sender};
 
 use super::{Message, UnitObj};
@@ -12,15 +12,14 @@ use crate::{
     Rc,
 };
 
-/// the function to start a unit
+/// the function to start a single specific unit
 ///
 /// process:
 /// 1. check current state is inactive
-///    need: state
 /// 2. set state to wait deps
-///    need: state
 /// 3. wait deps(afters) to start(be active)
-///    need: listen to events
+///     - afters: active
+///     - requires: Starting?
 /// 4. self start:
 ///      1. set state to starting
 ///      2. prestart -> start -> post start

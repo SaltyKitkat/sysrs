@@ -7,19 +7,16 @@ use crate::Actors;
 /// should be called under tokio rt
 pub(crate) fn register_sig_handlers(actors: &Actors) {
     // handle ctrl-c/SIGINT
-    register_signal_handler(SignalKind::interrupt(), |mut signal| async move {
-        loop {
-            signal.recv().await;
-            println!("SIGINT!");
-        }
-    });
+    register_signal_handler(SignalKind::interrupt(), || println!("SIGINT!"));
 }
 
-fn register_signal_handler<F, H>(signalkind: SignalKind, handler: H)
-where
-    F: Future<Output = ()> + Send + 'static,
-    H: FnOnce(Signal) -> F,
-{
+fn register_signal_handler(signalkind: SignalKind, handler: impl FnMut()) {
     let sig = signal(signalkind).unwrap();
-    tokio::spawn(handler(sig));
+    tokio::spawn(async move {
+        loop {
+            signal.recv().await;
+            handler();
+        }
+        t
+    });
 }

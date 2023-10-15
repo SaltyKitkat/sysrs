@@ -1,12 +1,12 @@
 use futures::{Stream, StreamExt};
-use tokio::{select, sync::mpsc::Sender};
+use tokio::sync::mpsc::Sender;
 
 use super::{Message, UnitObj};
 use crate::{
     unit::{
         dep,
-        guard::{self, create_guard, GuardMessage},
-        state::{self, get_state, set_state, set_state_with_condition, State},
+        guard::{self, create_guard},
+        state::{self, get_state},
         Unit, UnitEntry,
     },
     Rc,
@@ -38,44 +38,7 @@ pub(crate) async fn start_unit_inner(
     dep.send(dep::Message::Insert(entry.clone(), unit.deps().clone()))
         .await
         .unwrap();
-    create_guard(guard, entry.clone(), |store, state, mut rx| async move {
-        if let Some(msg) = rx.recv().await {
-            match msg {
-                GuardMessage::DepsReady => (),
-                GuardMessage::Stop => {
-                    return State::Stopped;
-                }
-            }
-        }
-        // run start
-        match set_state_with_condition(&state, entry.clone(), State::Starting, |s| s.is_dead())
-            .await
-        {
-            Ok(_) => (),
-            Err(_) => todo!(),
-        }
-        let mut handle = match unit.start().await {
-            Ok(handle) => handle,
-            Err(()) => return State::Failed,
-        };
-        set_state(&state, entry.clone(), State::Active).await;
-
-        // started, wait stop_sig / quit
-        select! {
-            msg = rx.recv() => match msg.unwrap() {
-                GuardMessage::DepsReady => todo!(),
-                GuardMessage::Stop => {
-                    set_state(&state, entry, State::Stopping).await;
-                    match unit.stop(handle).await {
-                        Ok(()) => State::Stopped,
-                        Err(()) => todo!(),
-                    }
-                },
-            },
-            state = handle.wait() => state,
-        }
-    })
-    .await;
+    create_guard(guard, unit).await;
 }
 
 pub(crate) async fn update_unit(store: &Sender<Message>, unit: impl Unit + Send + Sync + 'static) {

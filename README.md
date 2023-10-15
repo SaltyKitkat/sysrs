@@ -79,18 +79,7 @@
     ```rust
     pub(crate) enum Message {
         /// Insert a guard.
-        Insert(
-            UnitEntry,
-            Box<
-                dyn FnOnce(
-                        Sender<store::Message>,
-                        Sender<state::Message>,
-                        Receiver<GuardMessage>,
-                    ) -> BoxFuture<'static, State>
-                    + Send
-                    + 'static,
-            >, // todo: guard refactor
-        ),
+        Insert(UnitObj),
         /// remove a guard \
         /// usually called by self when a gurad quits
         Remove(UnitEntry),
@@ -242,10 +231,10 @@ pub(crate) struct UnitImpl<KindImpl> {
 	- [ ] Dep -> ???
 	- [x] GuardManager -> GuardStore
 	- [ ] StateManager -> StateStore
-- [ ] refactor guard code
-  给Guard一个类型，而不是现在的`Box<dyn FnOnce(Sender<store::Message>, Sender<state::Message>, Receiver<GuardMessage>) -> BoxFuture<'static, State> + Send + 'static>`  
+- [x] refactor guard code
+  给Guard一个类型，而不是现在的`Box<dyn FnOnce(Sender<store::Message>, Sender<state::Message>, Receiver<GuardMessage>) -> BoxFuture<'static, State> + Send + 'static>`
 - [ ] impl socket trigger service start
-  add Args for `Unit::start`, and pass socket to service 
+  add Args for `Unit::start`, and pass socket to service
 - [ ] remove all magic numbers and use const instead
 - [ ] logging
 - [ ] Error handle

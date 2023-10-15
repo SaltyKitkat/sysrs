@@ -1,31 +1,81 @@
 use std::collections::HashMap;
 
-use futures::{future::BoxFuture, Future};
 use tokio::{
+    select,
     sync::mpsc::{self, Receiver, Sender},
     task::JoinHandle,
 };
+
+use crate::unit::state::set_state_with_condition;
 
 use super::{
     state::{self, set_state, State},
     store, UnitEntry, UnitObj,
 };
 
+struct Guard {
+    unit: UnitObj,
+    guard: Sender<Message>,
+    state: Sender<state::Message>,
+}
+
+impl Guard {
+    fn new(unit: UnitObj, guard: Sender<Message>, state: Sender<state::Message>) -> Self {
+        Self { unit, guard, state }
+    }
+    fn run(self, mut rx: Receiver<GuardMessage>) -> JoinHandle<()> {
+        tokio::spawn(async move {
+            let entry = UnitEntry::from(self.unit.as_ref());
+            if let Some(msg) = rx.recv().await {
+                match msg {
+                    GuardMessage::DepsReady => (),
+                    GuardMessage::Stop => {
+                        set_state(&self.state, entry.clone(), State::Stopped).await;
+                        return;
+                    }
+                }
+            }
+            // run start
+            match set_state_with_condition(&self.state, entry.clone(), State::Starting, |s| {
+                s.is_dead()
+            })
+            .await
+            {
+                Ok(_) => (),
+                Err(_) => todo!(),
+            }
+            let mut handle = match self.unit.start().await {
+                Ok(handle) => handle,
+                Err(()) => {
+                    set_state(&self.state, entry.clone(), State::Active).await;
+                    return;
+                }
+            };
+            set_state(&self.state, entry.clone(), State::Active).await;
+
+            // started, wait stop_sig / quit
+            let state = select! {
+                msg = rx.recv() => match msg.unwrap() {
+                    GuardMessage::DepsReady => todo!(),
+                    GuardMessage::Stop => {
+                        set_state(&self.state, entry.clone(), State::Stopping).await;
+                        match self.unit.stop(handle).await {
+                            Ok(()) => State::Stopped,
+                            Err(()) => todo!(),
+                        }
+                    },
+                },
+                state = handle.wait() => state,
+            };
+            set_state(&self.state, entry.clone(), state).await;
+            self.guard.send(Message::Remove(entry)).await;
+        })
+    }
+}
+
 pub(crate) enum Message {
     /// Insert a guard.
-    Insert(
-        UnitEntry,
-        Box<
-            dyn FnOnce(
-                    Sender<store::Message>,
-                    Sender<state::Message>,
-                    Receiver<GuardMessage>,
-                ) -> BoxFuture<'static, State>
-                + Send
-                + 'static,
-        >, // todo: guard refactor
-    ),
-    Insert2(UnitEntry, UnitObj),
+    Insert(UnitObj),
     /// remove a guard \
     /// usually called by self when a gurad quits
     Remove(UnitEntry),
@@ -62,20 +112,12 @@ impl GuardStore {
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
                 match msg {
-                    Message::Insert(u, s) => {
+                    Message::Insert(unitobj) => {
+                        let entry = UnitEntry::from(unitobj.as_ref());
                         let (sender, recevier) = mpsc::channel(4); // todo: remove magic number
-                        let fut = s(self.store.clone(), self.state.clone(), recevier);
-                        self.map.insert(u.clone(), sender); // todo: should return None, deal with Some(_) cases
-                        let sender = self.self_.clone();
-                        let state = self.state.clone();
-                        tokio::spawn(async move {
-                            let new_state = fut.await;
-                            // remove the entry after the guard end
-                            set_state(&state, u.clone(), new_state).await;
-                            sender.send(Message::Remove(u)).await.unwrap();
-                        });
+                        Guard::new(unitobj, self.self_.clone(), self.state.clone()).run(recevier);
+                        self.map.insert(entry.clone(), sender); // todo: should return None, deal with Some(_) cases
                     }
-                    Message::Insert2(unitentry, unitobj) => todo!(),
                     Message::Remove(u) => {
                         self.map.remove(&u);
                     }
@@ -106,21 +148,8 @@ pub(crate) enum GuardMessage {
     Stop,
 }
 
-// todo: guard refactor
-pub(crate) async fn create_guard<F, Fut>(guard_manager: &Sender<Message>, u: UnitEntry, f: F)
-where
-    F: FnOnce(Sender<store::Message>, Sender<state::Message>, Receiver<GuardMessage>) -> Fut
-        + Send
-        + 'static,
-    Fut: Future<Output = State> + Send + 'static,
-{
-    guard_manager
-        .send(Message::Insert(
-            u,
-            Box::new(|store, state, rx| Box::pin(f(store, state, rx))),
-        ))
-        .await
-        .unwrap();
+pub(crate) async fn create_guard(guard_manager: &Sender<Message>, u: UnitObj) {
+    guard_manager.send(Message::Insert(u)).await.unwrap();
 }
 
 pub(crate) async fn guard_stop(guard_manager: &Sender<Message>, u: UnitEntry) {

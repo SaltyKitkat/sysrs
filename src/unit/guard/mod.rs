@@ -8,7 +8,7 @@ use tokio::{
 
 use super::{
     state::{self, set_state, State},
-    store, UnitEntry,
+    store, UnitEntry, UnitObj,
 };
 
 pub(crate) enum Message {
@@ -25,6 +25,7 @@ pub(crate) enum Message {
                 + 'static,
         >, // todo: guard refactor
     ),
+    Insert2(UnitEntry, UnitObj),
     /// remove a guard \
     /// usually called by self when a gurad quits
     Remove(UnitEntry),
@@ -36,14 +37,14 @@ pub(crate) enum Message {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct GuardManager {
+pub(crate) struct GuardStore {
     map: HashMap<UnitEntry, Sender<GuardMessage>>,
     self_: Sender<Message>,
     store: Sender<store::Message>,
     state: Sender<state::Message>,
 }
 
-impl GuardManager {
+impl GuardStore {
     pub(crate) fn new(
         self_: Sender<Message>,
         store: Sender<store::Message>,
@@ -74,6 +75,7 @@ impl GuardManager {
                             sender.send(Message::Remove(u)).await.unwrap();
                         });
                     }
+                    Message::Insert2(unitentry, unitobj) => todo!(),
                     Message::Remove(u) => {
                         self.map.remove(&u);
                     }

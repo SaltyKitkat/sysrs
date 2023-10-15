@@ -82,13 +82,13 @@ pub(crate) enum Message {
 }
 
 #[derive(Debug)]
-pub(crate) struct StateManager {
+pub(crate) struct StateStore {
     state: HashMap<UnitEntry, State>,
     monitor: HashMap<UnitEntry, Vec<MonitorRet>>,
     dep: Sender<dep::Message>,
 }
 
-impl StateManager {
+impl StateStore {
     pub(crate) fn new(dep: Sender<dep::Message>) -> Self {
         Self {
             state: Default::default(),

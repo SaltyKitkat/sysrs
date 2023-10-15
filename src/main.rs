@@ -10,8 +10,8 @@ use unit::dep;
 use crate::{
     unit::{
         dep::Dep,
-        guard::{self, GuardManager},
-        state::{self, StateManager},
+        guard::{self, GuardStore},
+        state::{self, StateStore},
         store::{self, utils::start_unit, utils::update_units, UnitStore},
         UnitEntry,
     },
@@ -95,8 +95,8 @@ impl Actors {
         let (dep, dep_rx) = channel(CHANNEL_LEN);
 
         UnitStore::new(state.clone(), guard.clone(), dep.clone()).run(store_rx);
-        StateManager::new(dep.clone()).run(state_rx);
-        GuardManager::new(guard.clone(), store.clone(), state.clone()).run(guard_rx);
+        StateStore::new(dep.clone()).run(state_rx);
+        GuardStore::new(guard.clone(), store.clone(), state.clone()).run(guard_rx);
         Dep::new(guard.clone()).run(dep_rx);
 
         Self {

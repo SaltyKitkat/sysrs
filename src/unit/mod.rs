@@ -105,6 +105,8 @@ pub(crate) trait Unit: Debug {
     async fn restart(&self, handle: UnitHandle) -> Result<UnitHandle, ()>;
 }
 
+pub(crate) type UnitObj = Rc<dyn Unit + Send + Sync + 'static>;
+
 #[derive(Debug)]
 pub(crate) struct UnitImpl<KindImpl> {
     pub common: UnitCommon,

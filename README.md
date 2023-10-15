@@ -236,19 +236,19 @@ pub(crate) struct UnitImpl<KindImpl> {
 
 # TODO：
 
-- [ ] make Sender<Message> a handle type, make Message private
+- [ ] make `Sender<Message>` a handle type, make Message private
+- [ ] actor mod
 - [ ] Unify Naming
-	eg:
-	UnitStore -> Store
-	Dep -> ???
-	GuardManager -> Guard
+	- [ ] Dep -> ???
+	- [x] GuardManager -> GuardStore
+	- [ ] StateManager -> StateStore
 - [ ] refactor guard code
-  给Guard一个类型，而不是现在的Box<dyn FnOnce(Sender<store::Message>, Sender<state::Message>, Receiver<GuardMessage>) -> BoxFuture<'static, State> + Send + 'static>
-	
+  给Guard一个类型，而不是现在的`Box<dyn FnOnce(Sender<store::Message>, Sender<state::Message>, Receiver<GuardMessage>) -> BoxFuture<'static, State> + Send + 'static>`  
+- [ ] impl socket trigger service start
+  add Args for `Unit::start`, and pass socket to service 
 - [ ] remove all magic numbers and use const instead
 - [ ] logging
 - [ ] Error handle
-
 
 ## signals
 

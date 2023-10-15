@@ -9,13 +9,11 @@ use super::{
     dep,
     guard::{self},
     state::{self, get_state},
-    Unit, UnitEntry,
+    Unit, UnitEntry, UnitObj,
 };
 use crate::{unit::guard::guard_stop, Rc};
 
 pub(crate) mod utils;
-
-type UnitObj = Rc<dyn Unit + Send + Sync + 'static>;
 
 pub(crate) enum Message {
     /// 用于调试 打印内部信息

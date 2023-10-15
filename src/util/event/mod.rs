@@ -2,7 +2,7 @@ use std::marker::Send;
 
 use tokio::signal::unix::{signal, SignalKind};
 
-use crate::Actors;
+use crate::actor::Actors;
 
 /// all the posix sig habdlers should be registered here
 /// should be called under tokio rt

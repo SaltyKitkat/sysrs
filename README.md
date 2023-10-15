@@ -72,8 +72,8 @@
     }
     ```
     - 引用的其他actor
-      - Guard
-  - Guard
+      - GuardStore
+  - GuardStore
     - 储存Unit的运行时守护task
     - api
     ```rust
@@ -91,10 +91,10 @@
     }
     ```
     - 引用的其他actor
-      - Guard(self)
-      - Store
-      - State
-  - State
+      - GuardStore(self)
+      - UnitStore
+      - StateStore
+  - StateStore
     - 储存Unit的状态信息。目前的状态如下：
     ```rust
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -157,8 +157,8 @@
     }
     ```
     - 引用的其他actor
-      - State
-      - Guard
+      - StateStore
+      - GuardStore
       - Dep
 
 <!-- - 依赖管理：按需(?)解算依赖，并控制依次启动/停止/重启等，并按需注册状态监视
@@ -226,11 +226,12 @@ pub(crate) struct UnitImpl<KindImpl> {
 # TODO：
 
 - [ ] make `Sender<Message>` a handle type, make Message private
-- [ ] actor mod
+- [x] refactor: actor mod
 - [ ] Unify Naming
 	- [ ] Dep -> ???
 	- [x] GuardManager -> GuardStore
-	- [ ] StateManager -> StateStore
+	- [x] StateManager -> StateStore
+	- [x] Store -> UnitStore
 - [x] refactor guard code
   给Guard一个类型，而不是现在的`Box<dyn FnOnce(Sender<store::Message>, Sender<state::Message>, Receiver<GuardMessage>) -> BoxFuture<'static, State> + Send + 'static>`
 - [ ] impl socket trigger service start

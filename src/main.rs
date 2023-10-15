@@ -1,20 +1,14 @@
 use std::time::Duration;
 
 use rustix::process;
-use tokio::{
-    sync::mpsc::{channel, Sender},
-    time::sleep,
-};
-use unit::dep;
+use tokio::time::sleep;
 
 use crate::{
-    unit::{
-        dep::Dep,
-        guard::{self, GuardStore},
-        state::{self, StateStore},
-        store::{self, utils::start_unit, utils::update_units, UnitStore},
-        UnitEntry,
+    actor::{
+        unit::utils::{start_unit, update_units},
+        Actors,
     },
+    unit::UnitEntry,
     util::{
         dbus::{connect_dbus, DbusServer},
         event::register_sig_handlers,
@@ -25,6 +19,7 @@ use crate::{
 // type Rc<T> = std::rc::Rc<T>;
 type Rc<T> = std::sync::Arc<T>;
 
+mod actor;
 mod fstab;
 mod unit;
 mod util;
@@ -75,35 +70,4 @@ async fn async_main() {
     //     .unwrap();
     sleep(Duration::from_secs(300)).await;
     println!("tokio finished!");
-}
-
-pub(crate) struct Actors {
-    pub(crate) store: Sender<store::Message>,
-    pub(crate) state: Sender<state::Message>,
-    pub(crate) guard: Sender<guard::Message>,
-    pub(crate) dep: Sender<dep::Message>,
-}
-
-impl Actors {
-    pub(crate) fn new() -> Self {
-        // 1024 should be big enough for normal use
-        const CHANNEL_LEN: usize = 1024;
-
-        let (store, store_rx) = channel(CHANNEL_LEN);
-        let (state, state_rx) = channel(CHANNEL_LEN);
-        let (guard, guard_rx) = channel(CHANNEL_LEN);
-        let (dep, dep_rx) = channel(CHANNEL_LEN);
-
-        UnitStore::new(state.clone(), guard.clone(), dep.clone()).run(store_rx);
-        StateStore::new(dep.clone()).run(state_rx);
-        GuardStore::new(guard.clone(), store.clone(), state.clone()).run(guard_rx);
-        Dep::new(guard.clone()).run(dep_rx);
-
-        Self {
-            store,
-            state,
-            guard,
-            dep,
-        }
-    }
 }

@@ -6,9 +6,12 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::Rc;
+use crate::{
+    unit::{State, UnitDeps, UnitEntry},
+    Rc,
+};
 
-use super::{guard, state::State, UnitDeps, UnitEntry};
+use super::guard;
 
 /// runtime mutable dep info, used to wait deps
 struct DepInfo {

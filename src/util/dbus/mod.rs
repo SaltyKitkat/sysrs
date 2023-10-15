@@ -3,20 +3,25 @@ use std::time::Duration;
 use tokio::{sync::mpsc::Sender, time::sleep};
 use zbus::{dbus_interface, Connection, ConnectionBuilder};
 
-use crate::unit::{
-    state::{self, print_state, register_state_monitor, State},
-    store::{self, utils::print_store, utils::start_unit, utils::stop_unit},
-    UnitEntry,
+use crate::{
+    actor::{
+        state::{self, print_state, register_state_monitor},
+        unit::{
+            self,
+            utils::{print_store, start_unit, stop_unit},
+        },
+    },
+    unit::{State, UnitEntry},
 };
 
 #[derive(Debug)]
 pub(crate) struct DbusServer {
-    store: Sender<store::Message>,
+    store: Sender<unit::Message>,
     state: Sender<state::Message>,
 }
 
 impl DbusServer {
-    pub(crate) fn new(store: Sender<store::Message>, state: Sender<state::Message>) -> Self {
+    pub(crate) fn new(store: Sender<unit::Message>, state: Sender<state::Message>) -> Self {
         Self { store, state }
     }
 }

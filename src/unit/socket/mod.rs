@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use futures::future::pending;
 use tokio::io::unix::AsyncFd;
 
-use super::{state::State, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
+use super::{State, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
 use crate::Rc;
 
 pub(crate) mod loader;

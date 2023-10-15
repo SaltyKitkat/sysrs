@@ -6,11 +6,13 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::unit::state::set_state_with_condition;
-
 use super::{
-    state::{self, set_state, State},
-    store, UnitEntry, UnitObj,
+    state::{self, set_state},
+    unit,
+};
+use crate::{
+    actor::state::set_state_with_condition,
+    unit::{State, UnitEntry, UnitObj},
 };
 
 struct Guard {
@@ -90,14 +92,14 @@ pub(crate) enum Message {
 pub(crate) struct GuardStore {
     map: HashMap<UnitEntry, Sender<GuardMessage>>,
     self_: Sender<Message>,
-    store: Sender<store::Message>,
+    store: Sender<unit::Message>,
     state: Sender<state::Message>,
 }
 
 impl GuardStore {
     pub(crate) fn new(
         self_: Sender<Message>,
-        store: Sender<store::Message>,
+        store: Sender<unit::Message>,
         state: Sender<state::Message>,
     ) -> Self {
         Self {

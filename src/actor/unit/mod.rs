@@ -9,9 +9,12 @@ use super::{
     dep,
     guard::{self},
     state::{self, get_state},
-    Unit, UnitEntry, UnitObj,
 };
-use crate::{unit::guard::guard_stop, Rc};
+use crate::{
+    actor::guard::guard_stop,
+    unit::{UnitEntry, UnitObj},
+    Rc,
+};
 
 pub(crate) mod utils;
 

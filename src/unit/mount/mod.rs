@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use futures::future::pending;
 use rustix::fs::{MountFlags, UnmountFlags};
 
-use super::{state::State, UnitCommon, UnitDeps, UnitHandle, UnitImpl};
 use crate::{
     fstab::{FsEntry, MountInfo},
     unit::{Unit, UnitKind},
@@ -12,6 +11,8 @@ use crate::{
     },
     Rc,
 };
+
+use super::{State, UnitCommon, UnitDeps, UnitHandle, UnitImpl};
 
 pub(crate) type Impl = Rc<MountInfo>;
 pub(super) struct Handle;

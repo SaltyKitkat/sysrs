@@ -1,7 +1,4 @@
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    fmt::Display,
-};
+use std::collections::{hash_map::Entry, HashMap};
 
 use tokio::{
     sync::{
@@ -11,49 +8,8 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::{dep, UnitEntry};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum State {
-    #[default]
-    Uninit = 0,
-    Stopped,
-    Failed,
-    Starting,
-    Active,
-    Stopping,
-}
-
-impl Display for State {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            State::Uninit => "Uninit",
-            State::Stopped => "Stopped",
-            State::Failed => "Failed",
-            State::Starting => "Starting",
-            State::Active => "Active",
-            State::Stopping => "Stopping",
-        };
-        write!(f, "{}", s)
-    }
-}
-
-impl State {
-    pub(crate) fn is_active(&self) -> bool {
-        match self {
-            State::Uninit | State::Stopped | State::Failed | State::Starting | State::Stopping => {
-                false
-            }
-            State::Active => true,
-        }
-    }
-    pub(crate) fn is_dead(&self) -> bool {
-        match self {
-            State::Starting | State::Active | State::Stopping => false,
-            State::Uninit | State::Stopped | State::Failed => true,
-        }
-    }
-}
+use super::dep;
+use crate::unit::{State, UnitEntry};
 
 type MonitorRet = oneshot::Sender<Result<State, State>>;
 

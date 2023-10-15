@@ -4,16 +4,52 @@ use async_trait::async_trait;
 
 use crate::Rc;
 
-use self::state::State;
-
-pub(crate) mod dep;
-pub(crate) mod guard;
 pub(crate) mod mount;
 pub(crate) mod service;
 pub(crate) mod socket;
-pub(crate) mod state;
-pub(crate) mod store;
 pub(crate) mod target;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum State {
+    #[default]
+    Uninit = 0,
+    Stopped,
+    Failed,
+    Starting,
+    Active,
+    Stopping,
+}
+
+impl Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            State::Uninit => "Uninit",
+            State::Stopped => "Stopped",
+            State::Failed => "Failed",
+            State::Starting => "Starting",
+            State::Active => "Active",
+            State::Stopping => "Stopping",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl State {
+    pub(crate) fn is_active(&self) -> bool {
+        match self {
+            State::Uninit | State::Stopped | State::Failed | State::Starting | State::Stopping => {
+                false
+            }
+            State::Active => true,
+        }
+    }
+    pub(crate) fn is_dead(&self) -> bool {
+        match self {
+            State::Starting | State::Active | State::Stopping => false,
+            State::Uninit | State::Stopped | State::Failed => true,
+        }
+    }
+}
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum UnitKind {
@@ -47,11 +83,11 @@ pub(crate) struct UnitCommon {
 
 #[derive(Debug, Default)]
 pub(crate) struct UnitDeps {
-    requires: Box<[UnitEntry]>,
-    wants: Box<[UnitEntry]>,
-    after: Box<[UnitEntry]>,
-    before: Box<[UnitEntry]>,
-    conflicts: Box<[UnitEntry]>,
+    pub requires: Box<[UnitEntry]>,
+    pub wants: Box<[UnitEntry]>,
+    pub after: Box<[UnitEntry]>,
+    pub before: Box<[UnitEntry]>,
+    pub conflicts: Box<[UnitEntry]>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]

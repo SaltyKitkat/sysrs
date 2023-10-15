@@ -36,7 +36,7 @@ pub(crate) async fn load_units_from_dir(
 ) -> impl Stream<Item = Rc<dyn Unit + Send + Sync + 'static>> {
     let path = path.as_ref();
     if path.is_dir() {
-        let mut dir = tokio::fs::read_dir(path).await.unwrap();
+        let dir = tokio::fs::read_dir(path).await.unwrap();
         let dir = tokio_stream::wrappers::ReadDirStream::new(dir);
         dir.filter_map(|e| async {
             match e {

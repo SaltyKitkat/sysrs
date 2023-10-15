@@ -7,7 +7,7 @@ use crate::Rc;
 pub(crate) mod loader;
 
 #[derive(Debug)]
-pub(crate) struct Impl {}
+pub(crate) struct Impl;
 pub(super) struct Handle;
 #[async_trait]
 impl super::Handle for Handle {
@@ -42,14 +42,14 @@ impl Unit for UnitImpl<Impl> {
     }
 
     async fn start(&self) -> Result<UnitHandle, ()> {
-        todo!()
+        Ok(Box::new(Handle))
     }
 
     async fn stop(&self, handle: UnitHandle) -> Result<(), ()> {
-        todo!()
+        Ok(())
     }
 
     async fn restart(&self, handle: UnitHandle) -> Result<UnitHandle, ()> {
-        todo!()
+        Ok(Box::new(Handle))
     }
 }

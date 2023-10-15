@@ -19,16 +19,41 @@
     pub fn run(self, mut rx: Receiver<Message>) -> JoinHandle<()> {
       tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
-          self.serve(msg);
+          match msg { ... }
         }
       })
     }
-    fn serve(&mut self, msg: Message) {
-      // logic
-    }
   }
   ```
-  需要注意的是，serve内部的逻辑应当是无阻塞的，以确保actor能够及时处理消息。对于需要同步/异步阻塞的部分，需要spawn出去一个任务单独执行。
+
+- Unit 实现
+  ```rust
+  struct Impl { ... }
+  struct Handle { ... }
+  #[async_trait]
+  impl crate::unit::Handle for Handle {
+      async fn stop(self: Box<Self>) -> UnitHandle {
+          // use runtime info to stop the running things
+      }
+      async fn wait(&mut self) -> State {
+          // monitor runtime state, and return exit state when it's dead
+      }
+  }
+
+  #[async_trait]
+  impl Unit for UnitImpl<Impl> {
+      ...
+      async start(&self) -> Result<UnitHandle, ()> {
+          // start job here, return a handle which
+          // contains runtime info needed for monitor and stop/kill
+      }
+
+      // do things needed to stop the unit
+      async fn stop(&self, handle: UnitHandle) -> Result<(), ()>;
+
+      async fn restart(&self, handle: UnitHandle) -> Result<UnitHandle, ()>;
+  }
+  ```
 
 - 配置文件读取：得到impl Unit，并填充足够信息（依赖，start,stop等等）
   配置文件解析器：`File -> impl Unit`

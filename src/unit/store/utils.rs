@@ -12,18 +12,20 @@ use crate::{
     Rc,
 };
 
-// start process:
-// 1. check current state is inactive
-//    need: state
-// 2. set state to wait deps
-//    need: state
-// 3. wait deps(afters) to start(be active)
-//    need: listen to events
-// 4. self start:
-//      1. set state to starting
-//      2. prestart -> start -> post start
-//      3. set stare to active/failed
-// 5. notice this unit has started/failed
+/// the function to start a unit
+///
+/// process:
+/// 1. check current state is inactive
+///    need: state
+/// 2. set state to wait deps
+///    need: state
+/// 3. wait deps(afters) to start(be active)
+///    need: listen to events
+/// 4. self start:
+///      1. set state to starting
+///      2. prestart -> start -> post start
+///      3. set stare to active/failed
+/// 5. notice this unit has started/failed
 pub(crate) async fn start_unit_inner(
     state_manager: &Sender<state::Message>,
     guard: &Sender<guard::Message>,

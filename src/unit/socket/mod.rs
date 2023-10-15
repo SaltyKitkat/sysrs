@@ -14,12 +14,12 @@ pub(crate) struct Impl {
     path: Rc<Path>,
 }
 
-pub(super) struct Handle;
+pub(super) struct Handle(AsyncFd<UnixListener>);
 
 #[async_trait]
 impl super::Handle for Handle {
     async fn stop(self: Box<Self>) -> Result<(), UnitHandle> {
-        Ok(())
+        todo!()
     }
     async fn wait(&mut self) -> State {
         // todo: monitor socket state
@@ -50,8 +50,9 @@ impl Unit for UnitImpl<Impl> {
     }
 
     async fn start(&self) -> Result<UnitHandle, ()> {
-        let socket = UnixListener::bind(self.sub.path.as_ref()).unwrap();
+        let socket = UnixListener::bind(&self.sub.path).unwrap();
         let fd = AsyncFd::new(socket).unwrap();
+        Ok(Box::new(Handle(fd)))
         // create_guard(
         //     &guard_manager,
         //     entry.clone(),
@@ -76,7 +77,6 @@ impl Unit for UnitImpl<Impl> {
         //     },
         // )
         // .await
-        todo!()
     }
 
     async fn stop(&self, handle: UnitHandle) -> Result<(), ()> {

@@ -16,7 +16,7 @@ pub(crate) mod store;
 pub(crate) mod target;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
-pub enum UnitKind {
+pub(crate) enum UnitKind {
     Service,
     Timer,
     Mount,
@@ -78,7 +78,10 @@ impl<T: Unit + ?Sized> From<&T> for UnitEntry {
 
 #[async_trait]
 pub(crate) trait Handle: Send {
+    /// use runtime info to stop the running things
     async fn stop(self: Box<Self>) -> Result<(), UnitHandle>;
+
+    /// monitor runtime state, and return exit state when it's dead
     async fn wait(&mut self) -> State;
 }
 type UnitHandle = Box<dyn Handle>;
@@ -92,8 +95,13 @@ pub(crate) trait Unit: Debug {
 
     fn deps(&self) -> Rc<UnitDeps>;
 
+    /// start the unit, return a handle which
+    /// contains runtime info needed for monitor and stop/kill
     async fn start(&self) -> Result<UnitHandle, ()>; // todo: error type
+
+    /// do things needed to stop the unit
     async fn stop(&self, handle: UnitHandle) -> Result<(), ()>;
+
     async fn restart(&self, handle: UnitHandle) -> Result<UnitHandle, ()>;
 }
 

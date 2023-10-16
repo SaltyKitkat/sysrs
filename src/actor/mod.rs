@@ -24,9 +24,9 @@ impl Actors {
         let (guard, guard_rx) = channel(CHANNEL_LEN);
         let (dep, dep_rx) = channel(CHANNEL_LEN);
 
-        UnitStore::new(state.clone(), guard.clone(), dep.clone()).run(store_rx);
+        UnitStore::new(state.clone(), guard.clone()).run(store_rx);
         StateStore::new(dep.clone()).run(state_rx);
-        GuardStore::new(guard.clone(), store.clone(), state.clone()).run(guard_rx);
+        GuardStore::new(guard.clone(), dep.clone(), state.clone()).run(guard_rx);
         Dep::new(guard.clone()).run(dep_rx);
 
         Self {

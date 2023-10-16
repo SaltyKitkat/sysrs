@@ -59,7 +59,7 @@
   配置文件解析器：`File -> impl Unit`
   特性：使用基于tokio的异步io
 
-- Actors
+- Actor
   - Dep
     - 运行时进行依赖关系的暂存与等待，保证各个Unit按预期顺序启动
     - api
@@ -73,6 +73,7 @@
     ```
     - 引用的其他actor
       - GuardStore
+
   - GuardStore
     - 储存Unit的运行时守护task
     - api
@@ -91,9 +92,10 @@
     }
     ```
     - 引用的其他actor
+      - Dep
       - GuardStore(self)
-      - UnitStore
       - StateStore
+
   - StateStore
     - 储存Unit的状态信息。目前的状态如下：
     ```rust
@@ -159,21 +161,7 @@
     - 引用的其他actor
       - StateStore
       - GuardStore
-      - Dep
 
-<!-- - 依赖管理：按需(?)解算依赖，并控制依次启动/停止/重启等，并按需注册状态监视
-  - 需要大量访问unit store数据，可以使之与unit store在同一线程，或是作为unitstore的插件
-  - 实现：
-    - 无状态：简单的依赖解算
-      利用队列与栈，按照依赖树顺序启动unit, 并去重
-      `fn(UnitEntry, cond:FnMut(UnitEntry) -> bool, op: FnMut(UnitEntry))` -->
-
-<!-- - 状态管理器：记录、调整并监视unit运行时状态信息
-  - RtStatus
-    - status: Running, Stopped, Stopping, Starting, Failed ...
-    - monitor handle -->
-
-<!-- - monitor: 事件驱动 异步 -->
 - signal handler
   - 利用tokio自带机制完成注册
   - 对于一个signal, 由于在tokio里面可以使用stream的形式处理，因此我们很容易得到以下注册方式：

@@ -6,12 +6,11 @@ use tokio::{
 };
 
 use super::{
-    dep,
-    guard::{self},
+    guard,
     state::{self, get_state},
 };
 use crate::{
-    actor::guard::guard_stop,
+    actor::guard::{create_guard, guard_stop},
     unit::{UnitEntry, UnitObj},
     Rc,
 };
@@ -38,20 +37,17 @@ pub(crate) struct UnitStore {
     map: HashMap<UnitEntry, UnitObj>, // info in unit files
     state_manager: Sender<state::Message>,
     guard_manager: Sender<guard::Message>,
-    dep: Sender<dep::Message>,
 }
 
 impl UnitStore {
     pub(crate) fn new(
         state_manager: Sender<state::Message>,
         guard_manager: Sender<guard::Message>,
-        dep: Sender<dep::Message>,
     ) -> Self {
         Self {
             map: HashMap::new(),
             state_manager,
             guard_manager,
-            dep,
         }
     }
 
@@ -74,31 +70,13 @@ impl UnitStore {
                             // find deps
                             let mut wants = self.find_wants(unit).await;
                             while let Some(unit) = wants.pop() {
-                                utils::start_unit_inner(
-                                    &self.state_manager,
-                                    &self.guard_manager,
-                                    &self.dep,
-                                    unit,
-                                )
-                                .await;
+                                create_guard(&self.guard_manager, unit).await;
                             }
                             let mut requires = self.find_requires(unit).await;
                             while let Some(unit) = requires.pop() {
-                                utils::start_unit_inner(
-                                    &self.state_manager,
-                                    &self.guard_manager,
-                                    &self.dep,
-                                    unit,
-                                )
-                                .await;
+                                create_guard(&self.guard_manager, unit).await;
                             }
-                            utils::start_unit_inner(
-                                &self.state_manager,
-                                &self.guard_manager,
-                                &self.dep,
-                                unit.clone(),
-                            )
-                            .await;
+                            create_guard(&self.guard_manager, unit.clone()).await;
                         }
                     }
                     Message::Stop(entry) => {

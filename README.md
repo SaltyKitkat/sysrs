@@ -226,7 +226,7 @@ pub(crate) struct UnitImpl<KindImpl> {
 - [ ] remove all magic numbers and use const instead
 - [ ] logging
 - [ ] Error handle
-- [ ] Remove state handle in store, use guard to know the state of units
+- [x] Remove state handle in store, use guard to know the state of units
 
 ## signals
 

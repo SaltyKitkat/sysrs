@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use futures_util::{stream, StreamExt};
 use tap::Pipe;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
@@ -11,7 +12,7 @@ use crate::{
     Rc,
 };
 
-use super::guard;
+use super::guard::{self, is_guard_exists};
 
 /// runtime mutable dep info, used to wait deps
 struct DepInfo {
@@ -86,8 +87,22 @@ impl Dep {
             while let Some(msg) = rx.recv().await {
                 match msg {
                     Message::Insert(entry, deps) => {
-                        let dep_info = DepInfo::from(deps.as_ref());
+                        let mut dep_info = DepInfo::from(deps.as_ref());
                         // todo: remove already active units int the dep_info list
+                        dep_info.wants = stream::iter(dep_info.wants)
+                            .filter(|want| {
+                                let want = want.clone();
+                                async { !is_guard_exists(&self.guard, want).await }
+                            })
+                            .collect()
+                            .await;
+                        dep_info.requires = stream::iter(dep_info.requires)
+                            .filter(|require| {
+                                let require = require.clone();
+                                async { !is_guard_exists(&self.guard, require).await }
+                            })
+                            .collect()
+                            .await;
                         if dep_info.can_start() {
                             self.guard
                                 .send(guard::Message::DepsReady(entry))

@@ -159,7 +159,6 @@
     }
     ```
     - 引用的其他actor
-      - StateStore
       - GuardStore
 
 - signal handler

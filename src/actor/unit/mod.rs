@@ -5,10 +5,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::{
-    guard,
-    state::{self, get_state},
-};
+use super::guard::{self, is_guard_exists};
 use crate::{
     actor::guard::{create_guard, guard_stop},
     unit::{UnitEntry, UnitObj},
@@ -35,19 +32,13 @@ pub(crate) enum Message {
 #[derive(Debug)]
 pub(crate) struct UnitStore {
     map: HashMap<UnitEntry, UnitObj>, // info in unit files
-    // todo: remove state use guard to know the state of units
-    state_manager: Sender<state::Message>,
     guard_manager: Sender<guard::Message>,
 }
 
 impl UnitStore {
-    pub(crate) fn new(
-        state_manager: Sender<state::Message>,
-        guard_manager: Sender<guard::Message>,
-    ) -> Self {
+    pub(crate) fn new(guard_manager: Sender<guard::Message>) -> Self {
         Self {
             map: HashMap::new(),
-            state_manager,
             guard_manager,
         }
     }
@@ -94,10 +85,10 @@ impl UnitStore {
         let mut queue = VecDeque::new();
         queue.extend(unit.deps().requires.iter().cloned());
         let mut stack = Vec::new();
-        while let Some(e) = queue.pop_front() {
-            if get_state(&self.state_manager, e.clone()).await.is_dead() {
+        while let Some(required_unit) = queue.pop_front() {
+            if !is_guard_exists(&self.guard_manager, required_unit.clone()).await {
                 println!("finding requires...");
-                if let Some(unit) = self.map.get(&e) {
+                if let Some(unit) = self.map.get(&required_unit) {
                     let unit = unit.clone();
                     let deps = unit.deps();
                     for dep in deps.requires.iter().cloned() {
@@ -122,10 +113,10 @@ impl UnitStore {
         let mut queue = VecDeque::new();
         queue.extend(unit.deps().wants.iter().cloned());
         let mut stack = Vec::new();
-        while let Some(e) = queue.pop_front() {
-            if get_state(&self.state_manager, e.clone()).await.is_dead() {
+        while let Some(wanted_unit) = queue.pop_front() {
+            if !is_guard_exists(&self.guard_manager, wanted_unit.clone()).await {
                 println!("finding wants...");
-                if let Some(unit) = self.map.get(&e) {
+                if let Some(unit) = self.map.get(&wanted_unit) {
                     let unit = unit.clone();
                     let deps = unit.deps();
                     for dep in deps.wants.iter().cloned() {
@@ -139,7 +130,7 @@ impl UnitStore {
                         stack.push(unit);
                     }
                 } else {
-                    todo!("handle misssing unit dep, missing: {e}")
+                    todo!("handle misssing unit dep, missing: {wanted_unit}")
                 }
             }
         }

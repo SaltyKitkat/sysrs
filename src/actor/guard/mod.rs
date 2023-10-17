@@ -2,7 +2,10 @@ use std::collections::{hash_map::Entry, HashMap};
 
 use tokio::{
     select,
-    sync::mpsc::{self, Receiver, Sender},
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        oneshot,
+    },
     task::JoinHandle,
 };
 
@@ -112,6 +115,8 @@ impl Guard {
 }
 
 pub(crate) enum Message {
+    /// Query if guard of the specific unit exists
+    Contains(UnitEntry, oneshot::Sender<bool>),
     /// Insert a guard.
     Insert(UnitObj),
     /// remove a guard \
@@ -150,6 +155,9 @@ impl GuardStore {
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
                 match msg {
+                    Message::Contains(unitentry, ret) => {
+                        ret.send(self.map.contains_key(&unitentry)).unwrap();
+                    }
                     Message::Insert(unitobj) => {
                         let entry = UnitEntry::from(unitobj.as_ref());
                         match self.map.entry(entry.clone()) {
@@ -205,4 +213,10 @@ pub(crate) async fn create_guard(guard_manager: &Sender<Message>, u: UnitObj) {
 
 pub(crate) async fn guard_stop(guard_manager: &Sender<Message>, u: UnitEntry) {
     guard_manager.send(Message::Stop(u)).await.unwrap()
+}
+
+pub(crate) async fn is_guard_exists(guard_manager: &Sender<Message>, u: UnitEntry) -> bool {
+    let (s, r) = oneshot::channel();
+    guard_manager.send(Message::Contains(u, s)).await.unwrap();
+    r.await.unwrap()
 }

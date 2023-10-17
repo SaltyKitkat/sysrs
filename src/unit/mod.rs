@@ -112,13 +112,20 @@ impl<T: Unit + ?Sized> From<&T> for UnitEntry {
     }
 }
 
+pub(crate) struct Extra {}
+
+pub(crate) enum RtMsg {
+    Exit(State),
+    TriggerStart(UnitEntry, Extra),
+}
+
 #[async_trait]
 pub(crate) trait Handle: Send {
     /// use runtime info to stop the running things
     async fn stop(self: Box<Self>) -> Result<(), UnitHandle>;
 
-    /// monitor runtime state, and return exit state when it's dead
-    async fn wait(&mut self) -> State;
+    /// monitor runtime state, and return messages including rt notice or exit state...
+    async fn wait(&mut self) -> RtMsg;
 }
 type UnitHandle = Box<dyn Handle>;
 

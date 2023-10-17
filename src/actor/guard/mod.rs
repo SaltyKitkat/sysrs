@@ -12,19 +12,31 @@ use super::{
 };
 use crate::{
     actor::state::set_state_with_condition,
-    unit::{State, UnitEntry, UnitObj},
+    unit::{RtMsg, State, UnitEntry, UnitObj},
 };
 
+struct Extra {}
 /// the guard during the lifetime of the unit
 struct Guard {
     unit: UnitObj,
+    extra: Option<Extra>,
     guard: Sender<Message>,
     state: Sender<state::Message>,
 }
 
 impl Guard {
-    fn new(unit: UnitObj, guard: Sender<Message>, state: Sender<state::Message>) -> Self {
-        Self { unit, guard, state }
+    fn new(
+        unit: UnitObj,
+        extra: Option<Extra>,
+        guard: Sender<Message>,
+        state: Sender<state::Message>,
+    ) -> Self {
+        Self {
+            unit,
+            extra,
+            guard,
+            state,
+        }
     }
 
     /// state:
@@ -73,18 +85,25 @@ impl Guard {
             set_state(&self.state, entry.clone(), State::Active).await;
 
             // started, wait stop_sig / quit
-            let state = select! {
-                msg = rx.recv() => match msg.unwrap() {
-                    GuardMessage::DepsReady => todo!("log error"),
-                    GuardMessage::Stop => {
-                        set_state(&self.state, entry.clone(), State::Stopping).await;
-                        match self.unit.stop(handle).await {
-                            Ok(()) => State::Stopped,
-                            Err(()) => todo!(),
+            let state = loop {
+                select! {
+                    msg = rx.recv() => match msg.unwrap() {
+                        GuardMessage::DepsReady => todo!("log error"),
+                        GuardMessage::Stop => {
+                            set_state(&self.state, entry.clone(), State::Stopping).await;
+                            match self.unit.stop(handle).await {
+                                Ok(()) => break State::Stopped,
+                                Err(()) => todo!(),
+                            }
+                        },
+                    },
+                    rt_msg = handle.wait() => match rt_msg {
+                        RtMsg::Exit(state) => break state,
+                        RtMsg::TriggerStart(unitentry, extra) => {
+                            // todo: start the unit with extra rt info
                         }
                     },
-                },
-                state = handle.wait() => state,
+                }
             };
             set_state(&self.state, entry.clone(), state).await;
             self.guard.send(Message::Remove(entry)).await.unwrap();
@@ -144,7 +163,7 @@ impl GuardStore {
                                     .send(dep::Message::Insert(entry, unitobj.deps()))
                                     .await
                                     .unwrap();
-                                Guard::new(unitobj, self.self_.clone(), self.state.clone())
+                                Guard::new(unitobj, None, self.self_.clone(), self.state.clone())
                                     .run(recevier);
                                 v.insert(sender);
                             }

@@ -12,7 +12,7 @@ use crate::{
     Rc,
 };
 
-use super::{State, UnitCommon, UnitDeps, UnitHandle, UnitImpl};
+use super::{RtMsg, UnitCommon, UnitDeps, UnitHandle, UnitImpl};
 
 pub(crate) type Impl = Rc<MountInfo>;
 pub(super) struct Handle;
@@ -23,7 +23,7 @@ impl super::Handle for Handle {
         // noop: all info in unit
         Ok(())
     }
-    async fn wait(&mut self) -> State {
+    async fn wait(&mut self) -> RtMsg {
         // todo: monitor mount point
         pending().await // never return
     }

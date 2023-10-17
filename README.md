@@ -35,8 +35,8 @@
       async fn stop(self: Box<Self>) -> UnitHandle {
           // use runtime info to stop the running things
       }
-      async fn wait(&mut self) -> State {
-          // monitor runtime state, and return exit state when it's dead
+      async fn wait(&mut self) -> RtMsg {
+          // monitor runtime state, and return messages including rt notice or exit state...
       }
   }
 
@@ -227,6 +227,7 @@ pub(crate) struct UnitImpl<KindImpl> {
 - [ ] remove all magic numbers and use const instead
 - [ ] logging
 - [ ] Error handle
+- [ ] Remove state handle in store, use guard to know the state of units
 
 ## signals
 

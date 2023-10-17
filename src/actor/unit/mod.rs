@@ -35,6 +35,7 @@ pub(crate) enum Message {
 #[derive(Debug)]
 pub(crate) struct UnitStore {
     map: HashMap<UnitEntry, UnitObj>, // info in unit files
+    // todo: remove state use guard to know the state of units
     state_manager: Sender<state::Message>,
     guard_manager: Sender<guard::Message>,
 }

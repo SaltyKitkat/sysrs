@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use futures::future::pending;
 
-use super::{State, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
+use super::{RtMsg, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
 use crate::Rc;
 
 pub(crate) mod loader;
@@ -14,7 +14,7 @@ impl super::Handle for Handle {
     async fn stop(self: Box<Self>) -> Result<(), UnitHandle> {
         Ok(())
     }
-    async fn wait(&mut self) -> State {
+    async fn wait(&mut self) -> RtMsg {
         pending().await
     }
 }

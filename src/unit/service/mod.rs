@@ -1,8 +1,10 @@
+use std::process::Stdio;
+
 use async_trait::async_trait;
 use futures::future::pending;
 use tokio::{io, process::Child};
 
-use super::{State, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
+use super::{RtMsg, State, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
 use crate::Rc;
 
 pub(crate) mod loader;
@@ -19,6 +21,7 @@ pub(crate) enum Handle {
     Process(tokio::process::Child),
     Empty,
 }
+
 #[async_trait]
 impl super::Handle for Handle {
     async fn stop(mut self: Box<Self>) -> Result<(), UnitHandle> {
@@ -27,14 +30,14 @@ impl super::Handle for Handle {
             Handle::Empty => Ok(()),
         }
     }
-    async fn wait(&mut self) -> State {
+    async fn wait(&mut self) -> RtMsg {
         match self {
             Handle::Process(child) => match child.wait().await {
                 Ok(exitcode) => {
                     if exitcode.success() {
-                        State::Stopped
+                        RtMsg::Exit(State::Stopped)
                     } else {
-                        State::Failed
+                        RtMsg::Exit(State::Failed)
                     }
                 }
                 Err(_) => todo!(),
@@ -157,5 +160,8 @@ fn run_cmd(cmd: &str) -> Result<Child, io::Error> {
     let mut s = cmd.split_whitespace();
     tokio::process::Command::new(s.next().unwrap())
         .args(s)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
 }

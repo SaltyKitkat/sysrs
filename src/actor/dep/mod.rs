@@ -87,6 +87,7 @@ impl Dep {
                 match msg {
                     Message::Insert(entry, deps) => {
                         let dep_info = DepInfo::from(deps.as_ref());
+                        // todo: remove already active units int the dep_info list
                         if dep_info.can_start() {
                             self.guard
                                 .send(guard::Message::DepsReady(entry))

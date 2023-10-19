@@ -19,6 +19,13 @@ use crate::{
 };
 
 struct Extra {}
+
+pub(crate) enum GuardMessage {
+    DepsReady,
+    DepsFailed,
+    Stop,
+}
+
 /// the guard during the lifetime of the unit
 struct Guard {
     unit: UnitObj,
@@ -51,6 +58,10 @@ impl Guard {
             if let Some(msg) = rx.recv().await {
                 match msg {
                     GuardMessage::DepsReady => (),
+                    GuardMessage::DepsFailed => {
+                        set_state(&self.state, entry.clone(), State::Failed).await;
+                        return;
+                    }
                     GuardMessage::Stop => {
                         set_state(&self.state, entry.clone(), State::Stopped).await; // maybe unnecessary since the unit is not active here?
                         return;
@@ -86,7 +97,7 @@ impl Guard {
             let state = loop {
                 select! {
                     msg = rx.recv() => match msg.unwrap() {
-                        GuardMessage::DepsReady => todo!("unreachable: log error"),
+                        GuardMessage::DepsReady | GuardMessage::DepsFailed => todo!("unreachable: log error"),
                         GuardMessage::Stop => {
                             set_state(&self.state, entry.clone(), State::Stopping).await;
                             match self.unit.stop(handle).await {
@@ -120,6 +131,8 @@ pub(crate) enum Message {
     /// notice all deps are ready for a specific unit \
     /// called by `Dep`
     DepsReady(UnitEntry),
+    /// notice there's at least one required dep of the specific unit failed
+    DepsFailed(UnitEntry),
     /// Send a Stop message to the specific unit guard
     Stop(UnitEntry),
 }
@@ -185,6 +198,14 @@ impl GuardStore {
                             .await
                             .ok(); // ignore error here since guard already dropped, this is useless to send
                     }
+                    Message::DepsFailed(u) => {
+                        self.map
+                            .get(&u)
+                            .unwrap()
+                            .send(GuardMessage::DepsFailed)
+                            .await
+                            .ok();
+                    }
                     Message::Stop(u) => {
                         self.map
                             .get(&u)
@@ -197,11 +218,6 @@ impl GuardStore {
             }
         })
     }
-}
-
-pub(crate) enum GuardMessage {
-    DepsReady,
-    Stop,
 }
 
 pub(crate) async fn create_guard(guard_manager: &Sender<Message>, u: UnitObj) {

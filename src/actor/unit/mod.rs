@@ -68,6 +68,9 @@ impl UnitStore {
                             while let Some(unit) = requires.pop() {
                                 create_guard(&self.guard_manager, unit).await;
                             }
+                            for conflict in unit.deps().conflicts.iter() {
+                                guard_stop(&self.guard_manager, conflict.clone()).await;
+                            }
                             create_guard(&self.guard_manager, unit.clone()).await;
                         }
                     }

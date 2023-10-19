@@ -60,7 +60,7 @@
   特性：使用基于tokio的异步io
 
 - Actor
-  - Dep
+  - DepStore
     - 运行时进行依赖关系的暂存与等待，保证各个Unit按预期顺序启动
     - api
     ```rust
@@ -92,7 +92,7 @@
     }
     ```
     - 引用的其他actor
-      - Dep
+      - DepStore
       - GuardStore(self)
       - StateStore
 
@@ -227,6 +227,16 @@ pub(crate) struct UnitImpl<KindImpl> {
 - [ ] logging
 - [ ] Error handle
 - [x] Remove state handle in store, use guard to know the state of units
+- [ ] impl Deps like systemd
+  - [x] start requires and wants
+  - [x] wait requires starting
+  - [x] fail when requires failed
+  - [x] stop when requires stop
+  - [x] stop conflicts
+  - [x] wait requires/wants active due to before/after
+  - [x] want conflicts stop due to before/after
+  - [ ] restart related:
+    - [ ] restart when requires restart
 
 ## signals
 

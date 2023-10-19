@@ -18,10 +18,11 @@ use super::{
 };
 
 /// runtime mutable dep info, used to wait deps
+///
+/// befores is useless in DepInfo since it will never block self.
 struct DepInfo {
     requires: HashSet<UnitEntry>,
     wants: HashSet<UnitEntry>,
-    before: HashSet<UnitEntry>,
     after: HashSet<UnitEntry>,
     conflicts: HashSet<UnitEntry>,
 }
@@ -37,7 +38,6 @@ impl From<&UnitDeps> for DepInfo {
         Self {
             requires: requires.iter().cloned().collect(),
             wants: wants.iter().cloned().collect(),
-            before: before.iter().cloned().collect(),
             after: after.iter().cloned().collect(),
             conflicts: conflicts.iter().cloned().collect(),
         }
@@ -48,20 +48,20 @@ impl DepInfo {
         let Self {
             requires,
             wants,
-            before,
             after,
             conflicts,
         } = self;
-        requires.is_empty() && wants.is_empty() && after.is_empty()
+        requires.is_empty() && wants.is_empty() && after.is_empty() && conflicts.is_empty()
     }
 }
 
+// after is useless in ReverseDepInfo since what we want is triggers/blocking_relations here,
+// self will never block afters start
 #[derive(Default)]
 struct ReverseDepInfo {
     required_by: HashSet<UnitEntry>,
     wanted_by: HashSet<UnitEntry>,
     before: HashSet<UnitEntry>,
-    after: HashSet<UnitEntry>,
     conflicts: HashSet<UnitEntry>,
 }
 
@@ -70,7 +70,6 @@ impl ReverseDepInfo {
         self.required_by.is_empty()
             && self.wanted_by.is_empty()
             && self.before.is_empty()
-            && self.after.is_empty()
             && self.conflicts.is_empty()
     }
 }
@@ -130,6 +129,13 @@ impl DepStore {
                             })
                             .collect()
                             .await;
+                        dep_info.conflicts = stream::iter(dep_info.conflicts)
+                            .filter(|conflict| {
+                                let conflict = conflict.clone();
+                                async { is_guard_exists(&self.guard, conflict).await }
+                            })
+                            .collect()
+                            .await;
 
                         if dep_info.can_start() {
                             self.guard
@@ -141,25 +147,25 @@ impl DepStore {
                                 &entry,
                                 &deps.requires,
                                 &mut self.reverse_map,
-                                |dep| &mut dep.required_by,
+                                |rdep| &mut rdep.required_by,
                             );
-                            reverse_map_insert(&entry, &deps.wants, &mut self.reverse_map, |dep| {
-                                &mut dep.wanted_by
-                            });
-                            reverse_map_insert(&entry, &deps.after, &mut self.reverse_map, |dep| {
-                                &mut dep.before
-                            });
                             reverse_map_insert(
                                 &entry,
-                                &deps.before,
+                                &deps.wants,
                                 &mut self.reverse_map,
-                                |dep| &mut dep.after,
+                                |rdep| &mut rdep.wanted_by,
+                            );
+                            reverse_map_insert(
+                                &entry,
+                                &deps.after,
+                                &mut self.reverse_map,
+                                |rdep| &mut rdep.before,
                             );
                             reverse_map_insert(
                                 &entry,
                                 &deps.conflicts,
                                 &mut self.reverse_map,
-                                |dep| &mut dep.conflicts,
+                                |rdep| &mut rdep.conflicts,
                             );
                             self.map.insert(entry, dep_info);
                         }
@@ -171,52 +177,95 @@ impl DepStore {
                             state,
                             guard,
                         } = &mut self;
-                        if let Entry::Occupied(mut reverse_dep) = reverse_map.entry(entry.clone()) {
+                        if let Entry::Occupied(reverse_dep) = reverse_map.entry(entry.clone()) {
+                            let reverse_dep = reverse_dep.get();
                             match new_state {
-                                State::Uninit => todo!(),
-                                State::Stopped => todo!(),
-                                State::Failed => todo!(),
+                                State::Uninit => unreachable!(),
+                                State::Stopped => {
+                                    for unit in reverse_dep.before.iter() {
+                                        if reverse_dep.conflicts.contains(unit) {
+                                            let dep = map.get_mut(unit).unwrap();
+                                            dep.after.remove(&entry);
+                                            if dep.can_start() {
+                                                map.remove(unit);
+                                                guard
+                                                    .send(guard::Message::DepsReady(unit.clone()))
+                                                    .await
+                                                    .unwrap();
+                                            }
+                                        }
+                                    }
+                                }
+                                State::Failed => {
+                                    for unit in reverse_dep.required_by.iter() {
+                                        map.remove(unit);
+                                        guard
+                                            .send(guard::Message::DepsFailed(unit.clone()))
+                                            .await
+                                            .unwrap()
+                                    }
+                                }
                                 State::Starting => {
-                                    for unit in reverse_dep.get_mut().required_by.drain() {
-                                        let dep = map.get_mut(&unit).unwrap();
+                                    for unit in reverse_dep.required_by.iter() {
+                                        let dep = map.get_mut(unit).unwrap();
                                         dep.requires.remove(&entry);
                                         if dep.can_start() {
-                                            map.remove(&unit);
+                                            map.remove(unit);
                                             guard
-                                                .send(guard::Message::DepsReady(unit))
+                                                .send(guard::Message::DepsReady(unit.clone()))
                                                 .await
                                                 .unwrap();
                                         }
                                     }
-                                    for unit in reverse_dep.get_mut().wanted_by.drain() {
-                                        let dep = map.get_mut(&unit).unwrap();
+                                    for unit in reverse_dep.wanted_by.iter() {
+                                        let dep = map.get_mut(unit).unwrap();
                                         dep.wants.remove(&entry);
                                         if dep.can_start() {
-                                            map.remove(&unit);
+                                            map.remove(unit);
                                             guard
-                                                .send(guard::Message::DepsReady(unit))
+                                                .send(guard::Message::DepsReady(unit.clone()))
                                                 .await
                                                 .unwrap();
                                         }
                                     }
                                 }
                                 State::Active => {
-                                    for unit in reverse_dep.get_mut().before.drain() {
-                                        let dep = map.get_mut(&unit).unwrap();
-                                        dep.after.remove(&entry);
+                                    for unit in reverse_dep.before.iter() {
+                                        if reverse_dep.required_by.contains(unit)
+                                            || reverse_dep.wanted_by.contains(unit)
+                                        {
+                                            let dep = map.get_mut(unit).unwrap();
+                                            dep.after.remove(&entry);
+                                            if dep.can_start() {
+                                                map.remove(unit);
+                                                guard
+                                                    .send(guard::Message::DepsReady(unit.clone()))
+                                                    .await
+                                                    .unwrap();
+                                            }
+                                        }
+                                    }
+                                }
+                                // stop `required_by`s and remove conflicts
+                                State::Stopping => {
+                                    for unit in reverse_dep.required_by.iter() {
+                                        guard
+                                            .send(guard::Message::Stop(unit.clone()))
+                                            .await
+                                            .unwrap()
+                                    }
+                                    for unit in reverse_dep.conflicts.iter() {
+                                        let dep = map.get_mut(unit).unwrap();
+                                        dep.conflicts.remove(&entry);
                                         if dep.can_start() {
-                                            map.remove(&unit);
+                                            map.remove(unit);
                                             guard
-                                                .send(guard::Message::DepsReady(unit))
+                                                .send(guard::Message::DepsReady(unit.clone()))
                                                 .await
                                                 .unwrap();
                                         }
                                     }
                                 }
-                                State::Stopping => todo!(),
-                            }
-                            if reverse_dep.get().is_empty() {
-                                reverse_dep.remove();
                             }
                         }
                     }

@@ -3,10 +3,7 @@ use std::{mem, os::unix::net::UnixListener, path::Path};
 use async_trait::async_trait;
 use futures::future::pending;
 use tap::Tap;
-use tokio::{
-    io::{self, unix::AsyncFd, AsyncReadExt, Interest},
-    sync::oneshot,
-};
+use tokio::{io::unix::AsyncFd, sync::oneshot};
 
 use super::{ChildStdio, Extra, RtMsg, Unit, UnitDeps, UnitEntry, UnitHandle, UnitImpl, UnitKind};
 use crate::Rc;

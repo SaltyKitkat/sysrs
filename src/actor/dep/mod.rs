@@ -66,7 +66,7 @@ struct ReverseDepInfo {
 }
 
 impl ReverseDepInfo {
-    fn can_be_removed(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.required_by.is_empty()
             && self.wanted_by.is_empty()
             && self.before.is_empty()
@@ -215,7 +215,7 @@ impl DepStore {
                                 }
                                 State::Stopping => todo!(),
                             }
-                            if reverse_dep.get().can_be_removed() {
+                            if reverse_dep.get().is_empty() {
                                 reverse_dep.remove();
                             }
                         }

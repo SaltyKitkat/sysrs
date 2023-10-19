@@ -214,8 +214,8 @@ pub(crate) struct UnitImpl<KindImpl> {
 
 - [ ] make `Sender<Message>` a handle type, make Message private
 - [x] refactor: actor mod
-- [ ] Unify Naming
-	- [ ] Dep -> ???
+- [x] Unify Naming
+	- [x] Dep -> DepStore
 	- [x] GuardManager -> GuardStore
 	- [x] StateManager -> StateStore
 	- [x] Store -> UnitStore

@@ -1,11 +1,13 @@
 use tokio::sync::mpsc::{channel, Sender};
 
-use crate::actor::{dep::Dep, guard::GuardStore, state::StateStore, unit::UnitStore};
+use crate::actor::{dep::DepStore, guard::GuardStore, state::StateStore, unit::UnitStore};
 
 pub(crate) mod dep;
 pub(crate) mod guard;
 pub(crate) mod state;
 pub(crate) mod unit;
+
+mod test;
 
 pub(crate) struct Actors {
     pub(crate) store: Sender<unit::Message>,
@@ -26,8 +28,8 @@ impl Actors {
 
         UnitStore::new(guard.clone()).run(store_rx);
         StateStore::new(dep.clone()).run(state_rx);
-        GuardStore::new(guard.clone(), dep.clone(), state.clone()).run(guard_rx);
-        Dep::new(guard.clone()).run(dep_rx);
+        GuardStore::new(dep.clone(), state.clone()).run(guard_rx);
+        DepStore::new(state.clone(), guard.clone()).run(dep_rx);
 
         Self {
             store,

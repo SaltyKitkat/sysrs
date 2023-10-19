@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use futures_util::{stream, StreamExt};
 use tap::Pipe;
@@ -12,7 +12,10 @@ use crate::{
     Rc,
 };
 
-use super::guard::{self, is_guard_exists};
+use super::{
+    guard::{self, is_guard_exists},
+    state::{self, get_state},
+};
 
 /// runtime mutable dep info, used to wait deps
 struct DepInfo {
@@ -62,23 +65,35 @@ struct ReverseDepInfo {
     conflicts: HashSet<UnitEntry>,
 }
 
+impl ReverseDepInfo {
+    fn can_be_removed(&self) -> bool {
+        self.required_by.is_empty()
+            && self.wanted_by.is_empty()
+            && self.before.is_empty()
+            && self.after.is_empty()
+            && self.conflicts.is_empty()
+    }
+}
+
 pub(crate) enum Message {
     /// 增加一项等待启动的Unit
     Insert(UnitEntry, Rc<UnitDeps>),
     /// 收到通知事件：指定Unit的状态发生改变
     StateChange(UnitEntry, State),
 }
-pub(crate) struct Dep {
+pub(crate) struct DepStore {
     map: HashMap<UnitEntry, DepInfo>,
     reverse_map: HashMap<UnitEntry, ReverseDepInfo>,
+    state: Sender<state::Message>,
     guard: Sender<guard::Message>,
 }
 
-impl Dep {
-    pub(crate) fn new(guard: Sender<guard::Message>) -> Self {
+impl DepStore {
+    pub(crate) fn new(state: Sender<state::Message>, guard: Sender<guard::Message>) -> Self {
         Self {
             map: Default::default(),
             reverse_map: Default::default(),
+            state,
             guard,
         }
     }
@@ -87,8 +102,13 @@ impl Dep {
             while let Some(msg) = rx.recv().await {
                 match msg {
                     Message::Insert(entry, deps) => {
+                        // since there's already a dep in here waiting for its deps
+                        // dont need to insert another time
+                        if self.map.contains_key(&entry) {
+                            continue;
+                        }
                         let mut dep_info = DepInfo::from(deps.as_ref());
-                        // todo: remove already active units int the dep_info list
+                        // remove already active units int the dep_info list
                         dep_info.wants = stream::iter(dep_info.wants)
                             .filter(|want| {
                                 let want = want.clone();
@@ -103,6 +123,14 @@ impl Dep {
                             })
                             .collect()
                             .await;
+                        dep_info.after = stream::iter(dep_info.after)
+                            .filter(|after| {
+                                let after = after.clone();
+                                async { !get_state(&self.state, after).await.is_active() }
+                            })
+                            .collect()
+                            .await;
+
                         if dep_info.can_start() {
                             self.guard
                                 .send(guard::Message::DepsReady(entry))
@@ -140,15 +168,16 @@ impl Dep {
                         let Self {
                             map,
                             reverse_map,
+                            state,
                             guard,
                         } = &mut self;
-                        if let Some(reverse_dep) = reverse_map.get_mut(&entry) {
+                        if let Entry::Occupied(mut reverse_dep) = reverse_map.entry(entry.clone()) {
                             match new_state {
                                 State::Uninit => todo!(),
                                 State::Stopped => todo!(),
                                 State::Failed => todo!(),
                                 State::Starting => {
-                                    for unit in reverse_dep.required_by.drain() {
+                                    for unit in reverse_dep.get_mut().required_by.drain() {
                                         let dep = map.get_mut(&unit).unwrap();
                                         dep.requires.remove(&entry);
                                         if dep.can_start() {
@@ -159,7 +188,7 @@ impl Dep {
                                                 .unwrap();
                                         }
                                     }
-                                    for unit in reverse_dep.wanted_by.drain() {
+                                    for unit in reverse_dep.get_mut().wanted_by.drain() {
                                         let dep = map.get_mut(&unit).unwrap();
                                         dep.wants.remove(&entry);
                                         if dep.can_start() {
@@ -172,9 +201,9 @@ impl Dep {
                                     }
                                 }
                                 State::Active => {
-                                    for unit in reverse_dep.after.drain() {
+                                    for unit in reverse_dep.get_mut().before.drain() {
                                         let dep = map.get_mut(&unit).unwrap();
-                                        dep.requires.remove(&entry);
+                                        dep.after.remove(&entry);
                                         if dep.can_start() {
                                             map.remove(&unit);
                                             guard
@@ -185,6 +214,9 @@ impl Dep {
                                     }
                                 }
                                 State::Stopping => todo!(),
+                            }
+                            if reverse_dep.get().can_be_removed() {
+                                reverse_dep.remove();
                             }
                         }
                     }

@@ -228,15 +228,20 @@ pub(crate) struct UnitImpl<KindImpl> {
 - [ ] Error handle
 - [x] Remove state handle in store, use guard to know the state of units
 - [ ] impl Deps like systemd
-  - [x] start requires and wants
-  - [x] wait requires starting
-  - [x] fail when requires failed
-  - [x] stop when requires stop
-  - [x] stop conflicts
-  - [x] wait requires/wants active due to before/after
-  - [x] want conflicts stop due to before/after
-  - [ ] restart related:
-    - [ ] restart when requires restart
+  - [ ] test
+    - [ ] write test
+    - [ ] pass test
+  - [ ] impl
+    - [x] start requires and wants
+    - [x] wait requires starting
+    - [x] fail when requires failed
+    - [x] stop when requires stop
+    - [x] stop conflicts
+    - [x] wait requires/wants active due to before/after
+    - [x] want conflicts stop due to before/after
+    - [ ] restart related:
+      - [ ] restart when requires restart
+- [ ] unified unit loader(depinfo name ...)
 
 ## signals
 

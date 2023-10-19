@@ -105,7 +105,7 @@ impl Unit for UnitImpl<Impl> {
     }
 
     fn deps(&self) -> Rc<UnitDeps> {
-        todo!()
+        self.common.deps.clone()
     }
 
     async fn start(&self) -> Result<UnitHandle, ()> {

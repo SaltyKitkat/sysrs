@@ -75,13 +75,21 @@ impl ReverseDepInfo {
 }
 
 pub(crate) enum Message {
+    /// 加载一个Unit的依赖信息
+    Load(UnitEntry, Rc<UnitDeps>),
+    /// 更新一个Unit的依赖信息
+    Update {
+        id: UnitEntry,
+        old: Rc<UnitDeps>,
+        new: Rc<UnitDeps>,
+    },
     /// 增加一项等待启动的Unit
-    Insert(UnitEntry, Rc<UnitDeps>),
+    AddToStartList(UnitEntry, Rc<UnitDeps>),
     /// 收到通知事件：指定Unit的状态发生改变
     StateChange(UnitEntry, State),
 }
 pub(crate) struct DepStore {
-    map: HashMap<UnitEntry, DepInfo>,
+    start_list: HashMap<UnitEntry, DepInfo>,
     reverse_map: HashMap<UnitEntry, ReverseDepInfo>,
     state: Sender<state::Message>,
     guard: Sender<guard::Message>,
@@ -90,7 +98,7 @@ pub(crate) struct DepStore {
 impl DepStore {
     pub(crate) fn new(state: Sender<state::Message>, guard: Sender<guard::Message>) -> Self {
         Self {
-            map: Default::default(),
+            start_list: Default::default(),
             reverse_map: Default::default(),
             state,
             guard,
@@ -100,10 +108,57 @@ impl DepStore {
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
                 match msg {
-                    Message::Insert(entry, deps) => {
+                    // todo: implement update deps(load already loaded deps)
+                    Message::Load(entry, deps) => {
+                        reverse_map_insert(&entry, &deps.requires, &mut self.reverse_map, |rdep| {
+                            &mut rdep.required_by
+                        });
+                        reverse_map_insert(&entry, &deps.wants, &mut self.reverse_map, |rdep| {
+                            &mut rdep.wanted_by
+                        });
+                        reverse_map_insert(&entry, &deps.after, &mut self.reverse_map, |rdep| {
+                            &mut rdep.before
+                        });
+                        reverse_map_insert(
+                            &entry,
+                            &deps.conflicts,
+                            &mut self.reverse_map,
+                            |rdep| &mut rdep.conflicts,
+                        );
+                    }
+                    // todo: test
+                    Message::Update { id, old, new } => {
+                        // remove old
+                        reverse_map_remove(&id, &old.requires, &mut self.reverse_map, |rdep| {
+                            &mut rdep.required_by
+                        });
+                        reverse_map_remove(&id, &old.wants, &mut self.reverse_map, |rdep| {
+                            &mut rdep.wanted_by
+                        });
+                        reverse_map_remove(&id, &old.after, &mut self.reverse_map, |rdep| {
+                            &mut rdep.before
+                        });
+                        reverse_map_remove(&id, &old.conflicts, &mut self.reverse_map, |rdep| {
+                            &mut rdep.conflicts
+                        });
+                        // insert new
+                        reverse_map_insert(&id, &new.requires, &mut self.reverse_map, |rdep| {
+                            &mut rdep.required_by
+                        });
+                        reverse_map_insert(&id, &new.wants, &mut self.reverse_map, |rdep| {
+                            &mut rdep.wanted_by
+                        });
+                        reverse_map_insert(&id, &new.after, &mut self.reverse_map, |rdep| {
+                            &mut rdep.before
+                        });
+                        reverse_map_insert(&id, &new.conflicts, &mut self.reverse_map, |rdep| {
+                            &mut rdep.conflicts
+                        });
+                    }
+                    Message::AddToStartList(entry, deps) => {
                         // since there's already a dep in here waiting for its deps
                         // dont need to insert another time
-                        if self.map.contains_key(&entry) {
+                        if self.start_list.contains_key(&entry) {
                             continue;
                         }
                         let mut dep_info = DepInfo::from(deps.as_ref());
@@ -143,36 +198,12 @@ impl DepStore {
                                 .await
                                 .unwrap();
                         } else {
-                            reverse_map_insert(
-                                &entry,
-                                &deps.requires,
-                                &mut self.reverse_map,
-                                |rdep| &mut rdep.required_by,
-                            );
-                            reverse_map_insert(
-                                &entry,
-                                &deps.wants,
-                                &mut self.reverse_map,
-                                |rdep| &mut rdep.wanted_by,
-                            );
-                            reverse_map_insert(
-                                &entry,
-                                &deps.after,
-                                &mut self.reverse_map,
-                                |rdep| &mut rdep.before,
-                            );
-                            reverse_map_insert(
-                                &entry,
-                                &deps.conflicts,
-                                &mut self.reverse_map,
-                                |rdep| &mut rdep.conflicts,
-                            );
-                            self.map.insert(entry, dep_info);
+                            self.start_list.insert(entry, dep_info);
                         }
                     }
                     Message::StateChange(entry, new_state) => {
                         let Self {
-                            map,
+                            start_list: map,
                             reverse_map,
                             state,
                             guard,
@@ -287,5 +318,18 @@ fn reverse_map_insert(
             .or_default()
             .pipe(&field)
             .insert(unit0.clone());
+    }
+}
+
+fn reverse_map_remove(
+    unit0: &UnitEntry,
+    src: &[UnitEntry],
+    target: &mut HashMap<UnitEntry, ReverseDepInfo>,
+    field: impl Fn(&mut ReverseDepInfo) -> &mut HashSet<UnitEntry>,
+) {
+    for unit in src.iter() {
+        if let Some(item) = target.get_mut(unit) {
+            item.pipe(&field).remove(unit0);
+        }
     }
 }

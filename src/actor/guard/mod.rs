@@ -166,7 +166,7 @@ impl GuardStore {
                             Entry::Occupied(mut o) if o.get().is_closed() => {
                                 let (sender, recevier) = mpsc::channel(4); // todo: remove magic number
                                 self.dep
-                                    .send(dep::Message::Insert(entry, unitobj.deps()))
+                                    .send(dep::Message::AddToStartList(entry, unitobj.deps()))
                                     .await
                                     .unwrap();
                                 Guard::new(unitobj, None, self.state.clone()).run(recevier);
@@ -179,7 +179,7 @@ impl GuardStore {
                                 // unit not running, create the guard to start the unit
                                 let (sender, recevier) = mpsc::channel(4); // todo: remove magic number
                                 self.dep
-                                    .send(dep::Message::Insert(entry, unitobj.deps()))
+                                    .send(dep::Message::AddToStartList(entry, unitobj.deps()))
                                     .await
                                     .unwrap();
                                 Guard::new(unitobj, None, self.state.clone()).run(recevier);

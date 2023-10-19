@@ -5,7 +5,10 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::guard::{self, is_guard_exists};
+use super::{
+    dep,
+    guard::{self, is_guard_exists},
+};
 use crate::{
     actor::guard::{create_guard, guard_stop},
     unit::{UnitEntry, UnitObj},
@@ -32,13 +35,15 @@ pub(crate) enum Message {
 #[derive(Debug)]
 pub(crate) struct UnitStore {
     map: HashMap<UnitEntry, UnitObj>, // info in unit files
+    dep: Sender<dep::Message>,
     guard_manager: Sender<guard::Message>,
 }
 
 impl UnitStore {
-    pub(crate) fn new(guard_manager: Sender<guard::Message>) -> Self {
+    pub(crate) fn new(dep: Sender<dep::Message>, guard_manager: Sender<guard::Message>) -> Self {
         Self {
             map: HashMap::new(),
+            dep,
             guard_manager,
         }
     }
@@ -50,7 +55,21 @@ impl UnitStore {
                     Message::DbgPrint => println!("{:#?}", self.map),
                     Message::Update(entry, unit) => {
                         println!("updating unit: {:?}", &entry);
-                        self.map.insert(entry, unit);
+                        if let Some(old) = self.map.insert(entry.clone(), unit.clone()) {
+                            self.dep
+                                .send(dep::Message::Update {
+                                    id: entry,
+                                    old: old.deps(),
+                                    new: unit.deps(),
+                                })
+                                .await
+                                .unwrap();
+                        } else {
+                            self.dep
+                                .send(dep::Message::Load(entry, unit.deps()))
+                                .await
+                                .unwrap();
+                        }
                     }
                     Message::Remove(entry) => {
                         self.map.remove(&entry);

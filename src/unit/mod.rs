@@ -1,6 +1,10 @@
 use std::fmt::{Debug, Display};
 
 use async_trait::async_trait;
+use tokio::{
+    process::{ChildStderr, ChildStdin, ChildStdout},
+    sync::oneshot,
+};
 
 use crate::Rc;
 
@@ -112,9 +116,13 @@ impl<T: Unit + ?Sized> From<&T> for UnitEntry {
     }
 }
 
-pub(crate) struct Extra {}
+type ChildStdio = (ChildStdin, ChildStdout, ChildStderr);
+pub(crate) struct Extra {
+    pub basic_io: Option<oneshot::Sender<ChildStdio>>,
+}
 
 pub(crate) enum RtMsg {
+    Yield,
     Exit(State),
     TriggerStart(UnitEntry, Extra),
 }

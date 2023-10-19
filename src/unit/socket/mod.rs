@@ -1,10 +1,14 @@
-use std::{os::unix::net::UnixListener, path::Path};
+use std::{mem, os::unix::net::UnixListener, path::Path};
 
 use async_trait::async_trait;
 use futures::future::pending;
-use tokio::io::unix::AsyncFd;
+use tap::Tap;
+use tokio::{
+    io::{self, unix::AsyncFd, AsyncReadExt, Interest},
+    sync::oneshot,
+};
 
-use super::{RtMsg, Unit, UnitDeps, UnitHandle, UnitImpl, UnitKind};
+use super::{ChildStdio, Extra, RtMsg, Unit, UnitDeps, UnitEntry, UnitHandle, UnitImpl, UnitKind};
 use crate::Rc;
 
 pub(crate) mod loader;
@@ -12,16 +16,19 @@ pub(crate) mod loader;
 #[derive(Debug)]
 pub(crate) struct Impl {
     path: Rc<Path>,
+    service: UnitEntry,
 }
 
 enum RtState {
     Listening,
-    Running,
+    Starting(oneshot::Receiver<ChildStdio>),
+    Running(ChildStdio),
 }
 
 pub(super) struct Handle {
     fd: AsyncFd<UnixListener>,
     rt_state: RtState,
+    service: UnitEntry,
 }
 
 #[async_trait]
@@ -55,15 +62,28 @@ impl super::Handle for Handle {
         //     },
         // )
         // .await
-        let mut read_ready = self.fd.readable().await.unwrap();
-        match self.rt_state {
+        match &mut self.rt_state {
             RtState::Listening => {
+                let mut read_ready = self.fd.readable().await.unwrap();
                 read_ready.retain_ready();
-                // todo: start the unit with extra info?
+                let (s, r) = oneshot::channel();
+                self.rt_state = RtState::Starting(r);
+                return RtMsg::TriggerStart(self.service.clone(), Extra { basic_io: Some(s) });
             }
-            RtState::Running => {
-                // do nothing since child handling this?
+            RtState::Starting(_) => {
+                if let RtState::Starting(r) = mem::replace(&mut self.rt_state, RtState::Listening) {
+                    match r.await {
+                        Ok(child_stdio) => {
+                            self.rt_state = RtState::Running(child_stdio);
+                            return RtMsg::Yield;
+                        }
+                        Err(_) => todo!(),
+                    }
+                } else {
+                    unreachable!()
+                }
             }
+            RtState::Running((child_in, child_out, child_err)) => todo!(),
         }
         pending().await
     }
@@ -92,11 +112,14 @@ impl Unit for UnitImpl<Impl> {
     }
 
     async fn start(&self) -> Result<UnitHandle, ()> {
-        let socket = UnixListener::bind(&self.sub.path).unwrap();
+        let socket = UnixListener::bind(&self.sub.path)
+            .unwrap()
+            .tap_mut(|s| s.set_nonblocking(true).unwrap());
         let fd = AsyncFd::new(socket).unwrap();
         Ok(Box::new(Handle {
             fd,
             rt_state: RtState::Listening,
+            service: self.sub.service.clone(),
         }))
     }
 

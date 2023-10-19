@@ -96,6 +96,7 @@ impl Guard {
                         },
                     },
                     rt_msg = handle.wait() => match rt_msg {
+                        RtMsg::Yield => (),
                         RtMsg::Exit(state) => break state,
                         RtMsg::TriggerStart(unitentry, extra) => {
                             // todo: start the unit with extra rt info

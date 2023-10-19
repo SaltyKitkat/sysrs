@@ -13,6 +13,7 @@ use super::Impl;
 pub(crate) struct Socket {
     name: String,
     path: PathBuf,
+    service: String,
 }
 
 impl From<Socket> for UnitImpl<Impl> {
@@ -26,6 +27,7 @@ impl From<Socket> for UnitImpl<Impl> {
             },
             sub: Impl {
                 path: value.path.into(),
+                service: value.service.as_str().into(),
             },
         }
     }

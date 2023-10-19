@@ -110,47 +110,25 @@ impl DepStore {
                 match msg {
                     // todo: implement update deps(load already loaded deps)
                     Message::Load(id, deps) => {
-                        reverse_map_insert(&id, &deps.requires, &mut self.reverse_map, |rdep| {
-                            &mut rdep.required_by
-                        });
-                        reverse_map_insert(&id, &deps.wants, &mut self.reverse_map, |rdep| {
-                            &mut rdep.wanted_by
-                        });
-                        reverse_map_insert(&id, &deps.after, &mut self.reverse_map, |rdep| {
-                            &mut rdep.before
-                        });
-                        reverse_map_insert(&id, &deps.conflicts, &mut self.reverse_map, |rdep| {
-                            &mut rdep.conflicts
-                        });
+                        let rmap = &mut self.reverse_map;
+                        reverse_map_insert(&id, &deps.requires, rmap, |rdep| &mut rdep.required_by);
+                        reverse_map_insert(&id, &deps.wants, rmap, |rdep| &mut rdep.wanted_by);
+                        reverse_map_insert(&id, &deps.after, rmap, |rdep| &mut rdep.before);
+                        reverse_map_insert(&id, &deps.conflicts, rmap, |rdep| &mut rdep.conflicts);
                     }
                     // todo: test
                     Message::Update { id, old, new } => {
+                        let rmap = &mut self.reverse_map;
                         // remove old
-                        reverse_map_remove(&id, &old.requires, &mut self.reverse_map, |rdep| {
-                            &mut rdep.required_by
-                        });
-                        reverse_map_remove(&id, &old.wants, &mut self.reverse_map, |rdep| {
-                            &mut rdep.wanted_by
-                        });
-                        reverse_map_remove(&id, &old.after, &mut self.reverse_map, |rdep| {
-                            &mut rdep.before
-                        });
-                        reverse_map_remove(&id, &old.conflicts, &mut self.reverse_map, |rdep| {
-                            &mut rdep.conflicts
-                        });
+                        reverse_map_remove(&id, &old.requires, rmap, |rdep| &mut rdep.required_by);
+                        reverse_map_remove(&id, &old.wants, rmap, |rdep| &mut rdep.wanted_by);
+                        reverse_map_remove(&id, &old.after, rmap, |rdep| &mut rdep.before);
+                        reverse_map_remove(&id, &old.conflicts, rmap, |rdep| &mut rdep.conflicts);
                         // insert new
-                        reverse_map_insert(&id, &new.requires, &mut self.reverse_map, |rdep| {
-                            &mut rdep.required_by
-                        });
-                        reverse_map_insert(&id, &new.wants, &mut self.reverse_map, |rdep| {
-                            &mut rdep.wanted_by
-                        });
-                        reverse_map_insert(&id, &new.after, &mut self.reverse_map, |rdep| {
-                            &mut rdep.before
-                        });
-                        reverse_map_insert(&id, &new.conflicts, &mut self.reverse_map, |rdep| {
-                            &mut rdep.conflicts
-                        });
+                        reverse_map_insert(&id, &new.requires, rmap, |rdep| &mut rdep.required_by);
+                        reverse_map_insert(&id, &new.wants, rmap, |rdep| &mut rdep.wanted_by);
+                        reverse_map_insert(&id, &new.after, rmap, |rdep| &mut rdep.before);
+                        reverse_map_insert(&id, &new.conflicts, rmap, |rdep| &mut rdep.conflicts);
                     }
                     Message::AddToStartList(id, deps) => {
                         // since there's already a dep in here waiting for its deps

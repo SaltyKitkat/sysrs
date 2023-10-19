@@ -8,7 +8,7 @@ use crate::{
         unit::utils::{start_unit, update_units},
         Actors,
     },
-    unit::UnitEntry,
+    unit::UnitId,
     util::{
         dbus::{connect_dbus, DbusServer},
         event::register_sig_handlers,
@@ -62,7 +62,7 @@ async fn async_main() {
     println!("before insert unit");
     update_units(&actors.store, load_units_from_dir("./units").await).await;
     println!("after insert unit");
-    start_unit(&actors.store, UnitEntry::from("t0.service")).await;
+    start_unit(&actors.store, UnitId::from("t0.service")).await;
     // start_unit(&actors.store, UnitEntry::from("dbus-system.service")).await;
     sleep(Duration::from_secs(3)).await;
     // let _conn = connect_dbus(DbusServer::new(actors.store.clone(), actors.state.clone()))

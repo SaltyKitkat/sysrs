@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     actor::guard::{create_guard, guard_stop},
-    unit::{UnitEntry, UnitObj},
+    unit::{UnitId, UnitObj},
     Rc,
 };
 
@@ -21,20 +21,20 @@ pub(crate) enum Message {
     /// 用于调试 打印内部信息
     DbgPrint,
     /// 用于更新/插入对应Unit的静态信息
-    Update(UnitEntry, UnitObj),
+    Update(UnitId, UnitObj),
     /// 移除Store中的指定Unit
-    Remove(UnitEntry),
+    Remove(UnitId),
     /// 启动指定Unit
-    Start(UnitEntry),
+    Start(UnitId),
     /// 停止指定Unit
-    Stop(UnitEntry),
+    Stop(UnitId),
     /// 重启指定Unit
-    Restart(UnitEntry),
+    Restart(UnitId),
 }
 
 #[derive(Debug)]
 pub(crate) struct UnitStore {
-    map: HashMap<UnitEntry, UnitObj>, // info in unit files
+    map: HashMap<UnitId, UnitObj>, // info in unit files
     dep: Sender<dep::Message>,
     guard_manager: Sender<guard::Message>,
 }
@@ -53,12 +53,12 @@ impl UnitStore {
             while let Some(msg) = rx.recv().await {
                 match msg {
                     Message::DbgPrint => println!("{:#?}", self.map),
-                    Message::Update(entry, unit) => {
-                        println!("updating unit: {:?}", &entry);
-                        if let Some(old) = self.map.insert(entry.clone(), unit.clone()) {
+                    Message::Update(id, unit) => {
+                        println!("updating unit: {:?}", &id);
+                        if let Some(old) = self.map.insert(id.clone(), unit.clone()) {
                             self.dep
                                 .send(dep::Message::Update {
-                                    id: entry,
+                                    id,
                                     old: old.deps(),
                                     new: unit.deps(),
                                 })
@@ -66,18 +66,18 @@ impl UnitStore {
                                 .unwrap();
                         } else {
                             self.dep
-                                .send(dep::Message::Load(entry, unit.deps()))
+                                .send(dep::Message::Load(id, unit.deps()))
                                 .await
                                 .unwrap();
                         }
                     }
-                    Message::Remove(entry) => {
-                        self.map.remove(&entry);
+                    Message::Remove(id) => {
+                        self.map.remove(&id);
                     }
                     // start the unit and its deps
-                    Message::Start(entry) => {
-                        println!("starting unit: {:?}", &entry);
-                        if let Some(unit) = self.map.get(&entry) {
+                    Message::Start(id) => {
+                        println!("starting unit: {:?}", &id);
+                        if let Some(unit) = self.map.get(&id) {
                             // find deps
                             let mut wants = self.find_wants(unit).await;
                             while let Some(unit) = wants.pop() {
@@ -93,11 +93,11 @@ impl UnitStore {
                             create_guard(&self.guard_manager, unit.clone()).await;
                         }
                     }
-                    Message::Stop(entry) => {
-                        println!("stopping unit: {:?}", &entry);
-                        guard_stop(&self.guard_manager, entry).await;
+                    Message::Stop(id) => {
+                        println!("stopping unit: {:?}", &id);
+                        guard_stop(&self.guard_manager, id).await;
                     }
-                    Message::Restart(entry) => todo!(),
+                    Message::Restart(id) => todo!(),
                 }
             }
         })

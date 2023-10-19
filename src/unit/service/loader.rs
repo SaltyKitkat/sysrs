@@ -1,6 +1,6 @@
 use crate::{
     unit::UnitCommon,
-    util::loader::{empty_str, str_to_unitentrys},
+    util::loader::{empty_str, str_to_unitids},
     Rc,
 };
 
@@ -74,11 +74,11 @@ impl UnitDeps {
         after: &str,
         conflicts: &str,
     ) -> Self {
-        let requires = str_to_unitentrys(requires);
-        let wants = str_to_unitentrys(wants);
-        let before = str_to_unitentrys(before);
-        let after = str_to_unitentrys(after);
-        let conflicts = str_to_unitentrys(conflicts);
+        let requires = str_to_unitids(requires);
+        let wants = str_to_unitids(wants);
+        let before = str_to_unitids(before);
+        let after = str_to_unitids(after);
+        let conflicts = str_to_unitids(conflicts);
         Self {
             requires,
             wants,

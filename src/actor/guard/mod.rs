@@ -15,7 +15,7 @@ use super::{
 };
 use crate::{
     actor::state::set_state_with_condition,
-    unit::{RtMsg, State, UnitEntry, UnitObj},
+    unit::{RtMsg, State, UnitId, UnitObj},
 };
 
 struct Extra {}
@@ -53,17 +53,17 @@ impl Guard {
     /// or wait stop sig and kill the unit by run `unit.stop`
     fn run(self, mut rx: Receiver<GuardMessage>) -> JoinHandle<()> {
         tokio::spawn(async move {
-            let entry = UnitEntry::from(self.unit.as_ref());
+            let id = UnitId::from(self.unit.as_ref());
             // wait deps
             if let Some(msg) = rx.recv().await {
                 match msg {
                     GuardMessage::DepsReady => (),
                     GuardMessage::DepsFailed => {
-                        set_state(&self.state, entry.clone(), State::Failed).await;
+                        set_state(&self.state, id.clone(), State::Failed).await;
                         return;
                     }
                     GuardMessage::Stop => {
-                        set_state(&self.state, entry.clone(), State::Stopped).await; // maybe unnecessary since the unit is not active here?
+                        set_state(&self.state, id.clone(), State::Stopped).await; // maybe unnecessary since the unit is not active here?
                         return;
                     }
                 }
@@ -71,10 +71,8 @@ impl Guard {
 
             // run start
             while let Err(old_state) =
-                set_state_with_condition(&self.state, entry.clone(), State::Starting, |s| {
-                    s.is_dead()
-                })
-                .await
+                set_state_with_condition(&self.state, id.clone(), State::Starting, |s| s.is_dead())
+                    .await
             {
                 match old_state {
                     // wait the stopping instance
@@ -87,11 +85,11 @@ impl Guard {
                 Ok(handle) => handle,
                 Err(()) => {
                     println!("unit start failed!");
-                    set_state(&self.state, entry.clone(), State::Failed).await;
+                    set_state(&self.state, id.clone(), State::Failed).await;
                     return;
                 }
             };
-            set_state(&self.state, entry.clone(), State::Active).await;
+            set_state(&self.state, id.clone(), State::Active).await;
 
             // started, wait stop_sig / quit
             let state = loop {
@@ -99,7 +97,7 @@ impl Guard {
                     msg = rx.recv() => match msg.unwrap() {
                         GuardMessage::DepsReady | GuardMessage::DepsFailed => todo!("unreachable: log error"),
                         GuardMessage::Stop => {
-                            set_state(&self.state, entry.clone(), State::Stopping).await;
+                            set_state(&self.state, id.clone(), State::Stopping).await;
                             match self.unit.stop(handle).await {
                                 Ok(()) => break State::Stopped,
                                 Err(()) => todo!(),
@@ -109,37 +107,37 @@ impl Guard {
                     rt_msg = handle.wait() => match rt_msg {
                         RtMsg::Yield => (),
                         RtMsg::Exit(state) => break state,
-                        RtMsg::TriggerStart(unitentry, extra) => {
+                        RtMsg::TriggerStart(id, extra) => {
                             // todo: start the unit with extra rt info
                         }
                     },
                 }
             };
-            set_state(&self.state, entry.clone(), state).await;
+            set_state(&self.state, id.clone(), state).await;
         })
     }
 }
 
 pub(crate) enum Message {
     /// Query if guard of the specific unit exists
-    Contains(UnitEntry, oneshot::Sender<bool>),
+    Contains(UnitId, oneshot::Sender<bool>),
     /// Insert a guard.
     Insert(UnitObj),
     /// remove a guard \
     /// usually called by self when a gurad quits
-    Remove(UnitEntry),
+    Remove(UnitId),
     /// notice all deps are ready for a specific unit \
     /// called by `Dep`
-    DepsReady(UnitEntry),
+    DepsReady(UnitId),
     /// notice there's at least one required dep of the specific unit failed
-    DepsFailed(UnitEntry),
+    DepsFailed(UnitId),
     /// Send a Stop message to the specific unit guard
-    Stop(UnitEntry),
+    Stop(UnitId),
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct GuardStore {
-    map: HashMap<UnitEntry, Sender<GuardMessage>>,
+    map: HashMap<UnitId, Sender<GuardMessage>>,
     dep: Sender<dep::Message>,
     state: Sender<state::Message>,
 }
@@ -157,29 +155,29 @@ impl GuardStore {
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
                 match msg {
-                    Message::Contains(unitentry, ret) => {
-                        ret.send(self.map.contains_key(&unitentry)).unwrap();
+                    Message::Contains(id, ret) => {
+                        ret.send(self.map.contains_key(&id)).unwrap();
                     }
                     Message::Insert(unitobj) => {
-                        let entry = UnitEntry::from(unitobj.as_ref());
-                        match self.map.entry(entry.clone()) {
+                        let id = UnitId::from(unitobj.as_ref());
+                        match self.map.entry(id.clone()) {
                             Entry::Occupied(mut o) if o.get().is_closed() => {
                                 let (sender, recevier) = mpsc::channel(4); // todo: remove magic number
                                 self.dep
-                                    .send(dep::Message::AddToStartList(entry, unitobj.deps()))
+                                    .send(dep::Message::AddToStartList(id, unitobj.deps()))
                                     .await
                                     .unwrap();
                                 Guard::new(unitobj, None, self.state.clone()).run(recevier);
                                 o.insert(sender);
                             }
                             Entry::Occupied(_) => {
-                                println!("insert {} when guard already exists!", entry)
+                                println!("insert {} when guard already exists!", id)
                             }
                             Entry::Vacant(v) => {
                                 // unit not running, create the guard to start the unit
                                 let (sender, recevier) = mpsc::channel(4); // todo: remove magic number
                                 self.dep
-                                    .send(dep::Message::AddToStartList(entry, unitobj.deps()))
+                                    .send(dep::Message::AddToStartList(id, unitobj.deps()))
                                     .await
                                     .unwrap();
                                 Guard::new(unitobj, None, self.state.clone()).run(recevier);
@@ -187,28 +185,28 @@ impl GuardStore {
                             }
                         }
                     }
-                    Message::Remove(u) => {
-                        self.map.remove(&u);
+                    Message::Remove(id) => {
+                        self.map.remove(&id);
                     }
-                    Message::DepsReady(u) => {
+                    Message::DepsReady(id) => {
                         self.map
-                            .get(&u)
+                            .get(&id)
                             .unwrap()
                             .send(GuardMessage::DepsReady)
                             .await
                             .ok(); // ignore error here since guard already dropped, this is useless to send
                     }
-                    Message::DepsFailed(u) => {
+                    Message::DepsFailed(id) => {
                         self.map
-                            .get(&u)
+                            .get(&id)
                             .unwrap()
                             .send(GuardMessage::DepsFailed)
                             .await
                             .ok();
                     }
-                    Message::Stop(u) => {
+                    Message::Stop(id) => {
                         self.map
-                            .get(&u)
+                            .get(&id)
                             .unwrap()
                             .send(GuardMessage::Stop)
                             .await
@@ -224,11 +222,11 @@ pub(crate) async fn create_guard(guard_manager: &Sender<Message>, u: UnitObj) {
     guard_manager.send(Message::Insert(u)).await.unwrap();
 }
 
-pub(crate) async fn guard_stop(guard_manager: &Sender<Message>, u: UnitEntry) {
+pub(crate) async fn guard_stop(guard_manager: &Sender<Message>, u: UnitId) {
     guard_manager.send(Message::Stop(u)).await.unwrap()
 }
 
-pub(crate) async fn is_guard_exists(guard_manager: &Sender<Message>, u: UnitEntry) -> bool {
+pub(crate) async fn is_guard_exists(guard_manager: &Sender<Message>, u: UnitId) -> bool {
     let (s, r) = oneshot::channel();
     guard_manager.send(Message::Contains(u, s)).await.unwrap();
     r.await.unwrap()

@@ -5,7 +5,7 @@ use futures::future::pending;
 use tap::Tap;
 use tokio::{io::unix::AsyncFd, sync::oneshot};
 
-use super::{ChildStdio, Extra, RtMsg, Unit, UnitDeps, UnitEntry, UnitHandle, UnitImpl, UnitKind};
+use super::{ChildStdio, Extra, RtMsg, Unit, UnitDeps, UnitHandle, UnitId, UnitImpl, UnitKind};
 use crate::Rc;
 
 pub(crate) mod loader;
@@ -13,7 +13,7 @@ pub(crate) mod loader;
 #[derive(Debug)]
 pub(crate) struct Impl {
     path: Rc<Path>,
-    service: UnitEntry,
+    service: UnitId,
 }
 
 enum RtState {
@@ -25,7 +25,7 @@ enum RtState {
 pub(super) struct Handle {
     fd: AsyncFd<UnixListener>,
     rt_state: RtState,
-    service: UnitEntry,
+    service: UnitId,
 }
 
 #[async_trait]
@@ -35,30 +35,6 @@ impl super::Handle for Handle {
     }
     async fn wait(&mut self) -> RtMsg {
         // todo: monitor socket state
-        // create_guard(
-        //     &guard_manager,
-        //     entry.clone(),
-        //     |store, state, mut rx| async move {
-        //         loop {
-        //             select! {
-        //                 read_ready = fd.readable() => {
-        //                     read_ready.unwrap().retain_ready();
-        //                     start_unit(&store, entry.clone()).await;
-        //                 },
-        //                 msg = rx.recv() => match msg.unwrap() {
-        //                     guard::GuardMessage::Stop | guard::GuardMessage::Kill => {
-        //                         drop(fd);
-        //                         break State::Stopped;
-        //                     }
-        //                     guard::GuardMessage::RequiresReady | guard::GuardMessage::AftersReady => {
-        //                         todo!()
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     },
-        // )
-        // .await
         match &mut self.rt_state {
             RtState::Listening => {
                 let mut read_ready = self.fd.readable().await.unwrap();

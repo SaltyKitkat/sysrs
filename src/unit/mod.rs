@@ -87,30 +87,30 @@ pub(crate) struct UnitCommon {
 
 #[derive(Debug, Default)]
 pub(crate) struct UnitDeps {
-    pub requires: Box<[UnitEntry]>,
-    pub wants: Box<[UnitEntry]>,
-    pub after: Box<[UnitEntry]>,
-    pub before: Box<[UnitEntry]>,
-    pub conflicts: Box<[UnitEntry]>,
+    pub requires: Box<[UnitId]>,
+    pub wants: Box<[UnitId]>,
+    pub after: Box<[UnitId]>,
+    pub before: Box<[UnitId]>,
+    pub conflicts: Box<[UnitId]>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub(crate) struct UnitEntry {
+pub(crate) struct UnitId {
     name: Rc<str>,
 }
-impl Display for UnitEntry {
+impl Display for UnitId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
 }
 
-impl From<&str> for UnitEntry {
+impl From<&str> for UnitId {
     fn from(value: &str) -> Self {
         Self { name: value.into() }
     }
 }
 
-impl<T: Unit + ?Sized> From<&T> for UnitEntry {
+impl<T: Unit + ?Sized> From<&T> for UnitId {
     fn from(value: &T) -> Self {
         Self { name: value.name() }
     }
@@ -124,7 +124,7 @@ pub(crate) struct Extra {
 pub(crate) enum RtMsg {
     Yield,
     Exit(State),
-    TriggerStart(UnitEntry, Extra),
+    TriggerStart(UnitId, Extra),
 }
 
 #[async_trait]

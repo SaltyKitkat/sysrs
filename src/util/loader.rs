@@ -8,16 +8,16 @@ use tokio::fs;
 use crate::{
     unit::{
         service::loader::load_service, socket::loader::load_socket, target::loader::load_target,
-        Unit, UnitDeps, UnitEntry,
+        Unit, UnitDeps, UnitId,
     },
     Rc,
 };
 
-pub(crate) fn str_to_unitentrys(s: &str) -> Box<[UnitEntry]> {
+pub(crate) fn str_to_unitids(s: &str) -> Box<[UnitId]> {
     s.split(',')
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
-        .map(|s| UnitEntry::from(s))
+        .map(|s| UnitId::from(s))
         .collect()
 }
 

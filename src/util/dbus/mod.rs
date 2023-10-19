@@ -11,7 +11,7 @@ use crate::{
             utils::{print_store, start_unit, stop_unit},
         },
     },
-    unit::{State, UnitEntry},
+    unit::{State, UnitId},
 };
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ impl DbusServer {
         msg.to_owned()
     }
     async fn start_unit(&self, unit: &str) -> u8 {
-        let id = UnitEntry::from(unit);
+        let id = UnitId::from(unit);
         start_unit(&self.store, id.clone()).await;
         // todo: really wait unit change to starting and then get the result
         sleep(Duration::from_millis(10)).await;
@@ -45,7 +45,7 @@ impl DbusServer {
     }
 
     async fn stop_unit(&self, unit: &str) -> u8 {
-        let id = UnitEntry::from(unit);
+        let id = UnitId::from(unit);
         stop_unit(&self.store, id.clone()).await;
         // todo: really wait unit change to stop and then get the result
         sleep(Duration::from_millis(10)).await;

@@ -66,9 +66,9 @@
     ```rust
     pub(crate) enum Message {
         /// 增加一项等待启动的Unit
-        Insert(UnitEntry, Rc<UnitDeps>),
+        Insert(UnitId, Rc<UnitDeps>),
         /// 收到通知事件：指定Unit的状态发生改变
-        StateChange(UnitEntry, State),
+        StateChange(UnitId, State),
     }
     ```
     - 引用的其他actor
@@ -83,12 +83,12 @@
         Insert(UnitObj),
         /// remove a guard \
         /// usually called by self when a gurad quits
-        Remove(UnitEntry),
+        Remove(UnitId),
         /// notice all deps are ready for a specific unit \
         /// called by `Dep`
-        DepsReady(UnitEntry),
+        DepsReady(UnitId),
         /// Send a Stop message to the specific unit guard
-        Stop(UnitEntry),
+        Stop(UnitId),
     }
     ```
     - 引用的其他actor
@@ -116,21 +116,21 @@
         /// 打印内部信息，用于调试
         DbgPrint,
         /// 获得指定Unit的状态
-        Get(UnitEntry, oneshot::Sender<State>),
+        Get(UnitId, oneshot::Sender<State>),
         /// 注册一个hook,用于监听特性unit的状态改变 \
         /// 是一个坏的api：由于unit start之后，set state的时机无法确定， \
         ///     因此想要在start一类操作之后获得state作为结果的情景无法使用此api实现
         Monitor {
-            entry: UnitEntry,
+            id: UnitId,
             s: MonitorRet,
             cond: Box<dyn FnOnce(State) -> bool + Send + 'static>,
         },
         /// 无条件设置指定Unit的状态
-        Set(UnitEntry, State),
+        Set(UnitId, State),
         /// 以当前状态作为条件决定是否设置指定Unit状态 \
         /// 一定程度上相当于对指定Unit的状态进行CAS原子操作
         SetWithCondition {
-            entry: UnitEntry,
+            id: UnitId,
             new_state: State,
             condition: Box<dyn FnOnce(State) -> bool + Send + 'static>,
         },
@@ -147,15 +147,15 @@
         /// 用于调试 打印内部信息
         DbgPrint,
         /// 用于更新/插入对应Unit的静态信息
-        Update(UnitEntry, UnitObj),
+        Update(UnitId, UnitObj),
         /// 移除Store中的指定Unit
-        Remove(UnitEntry),
+        Remove(UnitId),
         /// 启动指定Unit
-        Start(UnitEntry),
+        Start(UnitId),
         /// 停止指定Unit
-        Stop(UnitEntry),
+        Stop(UnitId),
         /// 重启指定Unit
-        Restart(UnitEntry),
+        Restart(UnitId),
     }
     ```
     - 引用的其他actor

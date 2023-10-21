@@ -1,16 +1,15 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 use tokio::{
-    sync::mpsc::{Receiver, Sender},
+    sync::{
+        mpsc::{Receiver, Sender},
+        oneshot,
+    },
     task::JoinHandle,
 };
 
-use super::{
-    dep,
-    guard::{self, is_guard_exists},
-};
+use super::dep;
 use crate::{
-    actor::guard::{create_guard, guard_stop},
     unit::{UnitId, UnitObj},
     Rc,
 };
@@ -24,6 +23,7 @@ pub(crate) enum Message {
     Update(UnitId, UnitObj),
     /// 移除Store中的指定Unit
     Remove(UnitId),
+    Get(UnitId, oneshot::Sender<UnitObj>),
     /// 启动指定Unit
     Start(UnitId),
     /// 停止指定Unit
@@ -36,15 +36,14 @@ pub(crate) enum Message {
 pub(crate) struct UnitStore {
     map: HashMap<UnitId, UnitObj>, // info in unit files
     dep: Sender<dep::Message>,
-    guard_manager: Sender<guard::Message>,
 }
 
 impl UnitStore {
-    pub(crate) fn new(dep: Sender<dep::Message>, guard_manager: Sender<guard::Message>) -> Self {
+    pub(crate) fn new(dep: Sender<dep::Message>) -> Self {
         Self {
             map: HashMap::new(),
             dep,
-            guard_manager,
+            // guard_manager,
         }
     }
 
@@ -56,14 +55,7 @@ impl UnitStore {
                     Message::Update(id, unit) => {
                         println!("updating unit: {:?}", &id);
                         if let Some(old) = self.map.insert(id.clone(), unit.clone()) {
-                            self.dep
-                                .send(dep::Message::Update {
-                                    id,
-                                    old: old.deps(),
-                                    new: unit.deps(),
-                                })
-                                .await
-                                .unwrap();
+                            todo!("增量更新依赖信息");
                         } else {
                             self.dep
                                 .send(dep::Message::Load(id, unit.deps()))
@@ -74,90 +66,23 @@ impl UnitStore {
                     Message::Remove(id) => {
                         self.map.remove(&id);
                     }
+                    Message::Get(id, sender) => {
+                        if let Some(unitobj) = self.map.get(&id).cloned() {
+                            sender.send(unitobj).ok();
+                        }
+                    }
                     // start the unit and its deps
                     Message::Start(id) => {
                         println!("starting unit: {:?}", &id);
-                        if let Some(unit) = self.map.get(&id) {
-                            // find deps
-                            let mut wants = self.find_wants(unit).await;
-                            while let Some(unit) = wants.pop() {
-                                create_guard(&self.guard_manager, unit).await;
-                            }
-                            let mut requires = self.find_requires(unit).await;
-                            while let Some(unit) = requires.pop() {
-                                create_guard(&self.guard_manager, unit).await;
-                            }
-                            for conflict in unit.deps().conflicts.iter() {
-                                guard_stop(&self.guard_manager, conflict.clone()).await;
-                            }
-                            create_guard(&self.guard_manager, unit.clone()).await;
-                        }
+                        self.dep.send(dep::Message::AddToStart(id)).await.unwrap()
                     }
                     Message::Stop(id) => {
                         println!("stopping unit: {:?}", &id);
-                        guard_stop(&self.guard_manager, id).await;
+                        self.dep.send(dep::Message::AddToStop(id)).await.unwrap()
                     }
                     Message::Restart(id) => todo!(),
                 }
             }
         })
-    }
-
-    async fn find_requires(&self, unit: &UnitObj) -> Vec<UnitObj> {
-        let mut queue = VecDeque::new();
-        queue.extend(unit.deps().requires.iter().cloned());
-        let mut stack = Vec::new();
-        while let Some(required_unit) = queue.pop_front() {
-            // if !is_guard_exists(&self.guard_manager, required_unit.clone()).await
-            {
-                println!("finding requires...");
-                if let Some(unit) = self.map.get(&required_unit) {
-                    let unit = unit.clone();
-                    let deps = unit.deps();
-                    for dep in deps.requires.iter().cloned() {
-                        println!("pushing {:?} into queue", &dep);
-                        queue.push_back(dep);
-                    }
-                    if stack
-                        .iter()
-                        .all(|u_in_stack| !Rc::ptr_eq(&unit, u_in_stack))
-                    {
-                        stack.push(unit);
-                    }
-                } else {
-                    todo!("handle misssing unit dep")
-                }
-            }
-        }
-        stack
-    }
-
-    async fn find_wants(&self, unit: &UnitObj) -> Vec<UnitObj> {
-        let mut queue = VecDeque::new();
-        queue.extend(unit.deps().wants.iter().cloned());
-        let mut stack = Vec::new();
-        while let Some(wanted_unit) = queue.pop_front() {
-            // if !is_guard_exists(&self.guard_manager, wanted_unit.clone()).await
-            {
-                println!("finding wants...");
-                if let Some(unit) = self.map.get(&wanted_unit) {
-                    let unit = unit.clone();
-                    let deps = unit.deps();
-                    for dep in deps.wants.iter().cloned() {
-                        println!("pushing {:?} into queue", &dep);
-                        queue.push_back(dep);
-                    }
-                    if stack
-                        .iter()
-                        .all(|u_in_stack| !Rc::ptr_eq(&unit, u_in_stack))
-                    {
-                        stack.push(unit);
-                    }
-                } else {
-                    todo!("handle misssing unit dep, missing: {wanted_unit}")
-                }
-            }
-        }
-        stack
     }
 }

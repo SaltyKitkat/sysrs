@@ -1,5 +1,5 @@
 use futures::{Stream, StreamExt};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{mpsc::Sender, oneshot};
 
 use super::{Message, UnitObj};
 use crate::{
@@ -22,6 +22,12 @@ pub(crate) async fn update_units(store: &Sender<Message>, units: impl Stream<Ite
             store.send(Message::Update(id, unit)).await.unwrap()
         })
         .await
+}
+
+pub(crate) async fn get_unit(store: &Sender<Message>, unit_id: UnitId) -> Option<UnitObj> {
+    let (s, r) = oneshot::channel();
+    store.send(Message::Get(unit_id, s)).await.unwrap();
+    r.await.ok()
 }
 
 pub(crate) async fn start_unit(store: &Sender<Message>, id: UnitId) {

@@ -1,7 +1,9 @@
 async fn wait() {
     use std::time::Duration;
     use tokio::time::sleep;
-    sleep(Duration::from_secs_f64(0.05)).await
+    println!("waiting start");
+    sleep(Duration::from_secs_f64(0.1)).await;
+    println!("waiting end");
 }
 
 #[test]
@@ -39,7 +41,7 @@ fn test_basic() {
             start_unit(&actors.store, UnitId::from("t0.service")).await;
             wait().await;
             stop_unit(&actors.store, UnitId::from("t0.service")).await;
-            start_unit(&actors.store, UnitId::from("t0.service")).await;
+            start_unit(&actors.store, UnitId::from("t0.service")).await; // bug: not started
             wait().await;
             stop_unit(&actors.store, UnitId::from("t0.service")).await;
             wait().await;
@@ -81,7 +83,10 @@ fn test_conflict() {
             wait().await;
             // conflict-with-t1 should stop
 
-            stop_unit(&actors.store, UnitId::from("t1.service")).await;
-            wait().await
+            start_unit(&actors.store, UnitId::from("conflict-with-t1.service")).await;
+            wait().await;
+
+            stop_unit(&actors.store, UnitId::from("conflict-with-t1.service")).await;
+            wait().await;
         });
 }

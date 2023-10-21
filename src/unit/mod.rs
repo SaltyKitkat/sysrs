@@ -40,18 +40,14 @@ impl Display for State {
 
 impl State {
     pub(crate) fn is_active(&self) -> bool {
-        match self {
-            State::Uninit | State::Stopped | State::Failed | State::Starting | State::Stopping => {
-                false
-            }
-            State::Active => true,
-        }
+        matches!(self, State::Active)
     }
     pub(crate) fn is_dead(&self) -> bool {
-        match self {
-            State::Starting | State::Active | State::Stopping => false,
-            State::Uninit | State::Stopped | State::Failed => true,
-        }
+        matches!(self, State::Uninit | State::Stopped | State::Failed)
+    }
+
+    pub(crate) fn is_stopped(&self) -> bool {
+        matches!(self, State::Stopped)
     }
 }
 

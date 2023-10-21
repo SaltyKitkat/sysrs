@@ -205,12 +205,9 @@ impl GuardStore {
                             .ok();
                     }
                     Message::Stop(id) => {
-                        self.map
-                            .get(&id)
-                            .unwrap()
-                            .send(GuardMessage::Stop)
-                            .await
-                            .ok(); // ignore error here since guard already dropped, this is useless to send
+                        if let Some(guard) = self.map.get(&id) {
+                            guard.send(GuardMessage::Stop).await.ok(); // ignore error here since guard already dropped, this is useless to send
+                        }
                     }
                 }
             }

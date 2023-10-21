@@ -108,7 +108,8 @@ impl UnitStore {
         queue.extend(unit.deps().requires.iter().cloned());
         let mut stack = Vec::new();
         while let Some(required_unit) = queue.pop_front() {
-            if !is_guard_exists(&self.guard_manager, required_unit.clone()).await {
+            // if !is_guard_exists(&self.guard_manager, required_unit.clone()).await
+            {
                 println!("finding requires...");
                 if let Some(unit) = self.map.get(&required_unit) {
                     let unit = unit.clone();
@@ -136,7 +137,8 @@ impl UnitStore {
         queue.extend(unit.deps().wants.iter().cloned());
         let mut stack = Vec::new();
         while let Some(wanted_unit) = queue.pop_front() {
-            if !is_guard_exists(&self.guard_manager, wanted_unit.clone()).await {
+            // if !is_guard_exists(&self.guard_manager, wanted_unit.clone()).await
+            {
                 println!("finding wants...");
                 if let Some(unit) = self.map.get(&wanted_unit) {
                     let unit = unit.clone();

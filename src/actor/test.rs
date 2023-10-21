@@ -1,7 +1,3 @@
-use crate::util::loader::load_units_from_dir;
-
-use super::{unit::utils::update_units, Actors};
-
 async fn wait() {
     use std::time::Duration;
     use tokio::time::sleep;
@@ -10,10 +6,7 @@ async fn wait() {
 
 #[test]
 fn test_basic() {
-    use tokio::task::yield_now;
-
-    use crate::actor::unit::utils::stop_unit;
-    use crate::{unit::UnitId, util::loader::load_units_from_dir};
+    use crate::{actor::unit::utils::stop_unit, unit::UnitId, util::loader::load_units_from_dir};
 
     use super::{
         unit::utils::{start_unit, update_units},
@@ -46,7 +39,6 @@ fn test_basic() {
             start_unit(&actors.store, UnitId::from("t0.service")).await;
             wait().await;
             stop_unit(&actors.store, UnitId::from("t0.service")).await;
-            yield_now().await;
             start_unit(&actors.store, UnitId::from("t0.service")).await;
             wait().await;
             stop_unit(&actors.store, UnitId::from("t0.service")).await;
@@ -64,6 +56,13 @@ fn test_basic() {
 
 #[test]
 fn test_conflict() {
+    use crate::{actor::unit::utils::stop_unit, unit::UnitId, util::loader::load_units_from_dir};
+
+    use super::{
+        unit::utils::{start_unit, update_units},
+        Actors,
+    };
+
     let result = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -71,5 +70,18 @@ fn test_conflict() {
         .block_on(async {
             let actors = Actors::new();
             update_units(&actors.store, load_units_from_dir("./units").await).await;
+
+            start_unit(&actors.store, UnitId::from("t1.service")).await;
+            wait().await;
+            start_unit(&actors.store, UnitId::from("conflict-with-t1.service")).await;
+            wait().await;
+            // t1 should stop
+
+            start_unit(&actors.store, UnitId::from("t0.service")).await;
+            wait().await;
+            // conflict-with-t1 should stop
+
+            stop_unit(&actors.store, UnitId::from("t1.service")).await;
+            wait().await
         });
 }

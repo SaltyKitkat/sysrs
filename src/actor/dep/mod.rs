@@ -13,45 +13,28 @@ use crate::{
 };
 
 use super::{
-    guard::{self, is_guard_exists},
+    guard,
     state::{self, get_state},
 };
 
 /// runtime mutable dep info, used to wait deps
 ///
-/// befores is useless in DepInfo since it will never block self.
+/// we only want to know what is blocking this unit to start
+/// so only `after` is useful
 struct DepInfo {
-    requires: HashSet<UnitId>,
-    wants: HashSet<UnitId>,
     after: HashSet<UnitId>,
-    conflicts: HashSet<UnitId>,
 }
 impl From<&UnitDeps> for DepInfo {
     fn from(value: &UnitDeps) -> Self {
-        let UnitDeps {
-            requires,
-            wants,
-            after,
-            before,
-            conflicts,
-        } = value;
+        let UnitDeps { after, .. } = value;
         Self {
-            requires: requires.iter().cloned().collect(),
-            wants: wants.iter().cloned().collect(),
             after: after.iter().cloned().collect(),
-            conflicts: conflicts.iter().cloned().collect(),
         }
     }
 }
 impl DepInfo {
     fn can_start(&self) -> bool {
-        let Self {
-            requires,
-            wants,
-            after,
-            conflicts,
-        } = self;
-        requires.is_empty() && wants.is_empty() && after.is_empty() && conflicts.is_empty()
+        self.after.is_empty() //&& requires.is_empty() && wants.is_empty() && conflicts.is_empty()
     }
 }
 
@@ -138,31 +121,10 @@ impl DepStore {
                         }
                         let mut dep_info = DepInfo::from(deps.as_ref());
                         // remove already active units int the dep_info list
-                        dep_info.wants = stream::iter(dep_info.wants)
-                            .filter(|want| {
-                                let want = want.clone();
-                                async { !is_guard_exists(&self.guard, want).await }
-                            })
-                            .collect()
-                            .await;
-                        dep_info.requires = stream::iter(dep_info.requires)
-                            .filter(|require| {
-                                let require = require.clone();
-                                async { !is_guard_exists(&self.guard, require).await }
-                            })
-                            .collect()
-                            .await;
                         dep_info.after = stream::iter(dep_info.after)
                             .filter(|after| {
                                 let after = after.clone();
                                 async { !get_state(&self.state, after).await.is_active() }
-                            })
-                            .collect()
-                            .await;
-                        dep_info.conflicts = stream::iter(dep_info.conflicts)
-                            .filter(|conflict| {
-                                let conflict = conflict.clone();
-                                async { is_guard_exists(&self.guard, conflict).await }
                             })
                             .collect()
                             .await;
@@ -178,7 +140,7 @@ impl DepStore {
                     }
                     Message::StateChange(id, new_state) => {
                         let Self {
-                            start_list: map,
+                            start_list,
                             reverse_map,
                             state,
                             guard,
@@ -188,14 +150,15 @@ impl DepStore {
                             match new_state {
                                 State::Uninit => unreachable!(),
                                 State::Stopped => {
-                                    for unit in reverse_dep.before.iter() {
-                                        if reverse_dep.conflicts.contains(unit) {
-                                            let dep = map.get_mut(unit).unwrap();
-                                            dep.after.remove(&id);
-                                            if dep.can_start() {
-                                                map.remove(unit);
+                                    for unit in &reverse_dep.before & &reverse_dep.conflicts {
+                                        if let Entry::Occupied(mut o) =
+                                            start_list.entry(unit.clone())
+                                        {
+                                            o.get_mut().after.remove(&id);
+                                            if o.get().can_start() {
+                                                o.remove();
                                                 guard
-                                                    .send(guard::Message::DepsReady(unit.clone()))
+                                                    .send(guard::Message::DepsReady(unit))
                                                     .await
                                                     .unwrap();
                                             }
@@ -203,73 +166,40 @@ impl DepStore {
                                     }
                                 }
                                 State::Failed => {
-                                    for unit in reverse_dep.required_by.iter() {
-                                        map.remove(unit);
-                                        guard
-                                            .send(guard::Message::DepsFailed(unit.clone()))
-                                            .await
-                                            .unwrap()
+                                    for unit in reverse_dep.required_by.iter().cloned() {
+                                        start_list.remove(&unit);
+                                        guard.send(guard::Message::DepsFailed(unit)).await.unwrap()
                                     }
                                 }
+                                // notice conflicts to stop
                                 State::Starting => {
-                                    for unit in reverse_dep.required_by.iter() {
-                                        let dep = map.get_mut(unit).unwrap();
-                                        dep.requires.remove(&id);
-                                        if dep.can_start() {
-                                            map.remove(unit);
-                                            guard
-                                                .send(guard::Message::DepsReady(unit.clone()))
-                                                .await
-                                                .unwrap();
-                                        }
-                                    }
-                                    for unit in reverse_dep.wanted_by.iter() {
-                                        let dep = map.get_mut(unit).unwrap();
-                                        dep.wants.remove(&id);
-                                        if dep.can_start() {
-                                            map.remove(unit);
-                                            guard
-                                                .send(guard::Message::DepsReady(unit.clone()))
-                                                .await
-                                                .unwrap();
-                                        }
+                                    // is this necessary?
+                                    for unit in reverse_dep.conflicts.iter().cloned() {
+                                        guard.send(guard::Message::Stop(unit)).await.unwrap();
                                     }
                                 }
                                 State::Active => {
-                                    for unit in reverse_dep.before.iter() {
-                                        if reverse_dep.required_by.contains(unit)
-                                            || reverse_dep.wanted_by.contains(unit)
+                                    for unit in &reverse_dep.before
+                                        & &(&reverse_dep.required_by | &reverse_dep.wanted_by)
+                                    {
+                                        if let Entry::Occupied(mut o) =
+                                            start_list.entry(unit.clone())
                                         {
-                                            let dep = map.get_mut(unit).unwrap();
-                                            dep.after.remove(&id);
-                                            if dep.can_start() {
-                                                map.remove(unit);
+                                            o.get_mut().after.remove(&id);
+                                            if o.get().can_start() {
+                                                o.remove();
                                                 guard
-                                                    .send(guard::Message::DepsReady(unit.clone()))
+                                                    .send(guard::Message::DepsReady(unit))
                                                     .await
                                                     .unwrap();
                                             }
                                         }
                                     }
                                 }
-                                // stop `required_by`s and remove conflicts
+                                // stop `required_by`s
                                 State::Stopping => {
-                                    for unit in reverse_dep.required_by.iter() {
-                                        guard
-                                            .send(guard::Message::Stop(unit.clone()))
-                                            .await
-                                            .unwrap()
-                                    }
-                                    for unit in reverse_dep.conflicts.iter() {
-                                        let dep = map.get_mut(unit).unwrap();
-                                        dep.conflicts.remove(&id);
-                                        if dep.can_start() {
-                                            map.remove(unit);
-                                            guard
-                                                .send(guard::Message::DepsReady(unit.clone()))
-                                                .await
-                                                .unwrap();
-                                        }
+                                    for unit in reverse_dep.required_by.iter().cloned() {
+                                        guard.send(guard::Message::Stop(unit)).await.unwrap()
                                     }
                                 }
                             }

@@ -9,9 +9,7 @@ name = "sysrsctl"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-async-recursion = "1.0.5"
 async-trait = "0.1.73"
-cgroups = "0.1.0"
 clap = { version = "4.4.4", features = ["derive"] }
 futures = "0.3.28"
 futures-util = "0.3.28"
@@ -22,7 +20,6 @@ tokio = { version = "1.29.1", features = ["fs", "parking_lot", "rt-multi-thread"
 tokio-stream = { version = "0.1.14", features = ["io-util", "signal", "fs"] }
 toml = "0.8.0"
 zbus = { version = "3.14.1", features = ["tokio"], default-features = false }
-zvariant = "3.15.0"
 
 [profile]
 [profile.dev.package."*"]

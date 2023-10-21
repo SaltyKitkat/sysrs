@@ -261,15 +261,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "cgroups"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b438c4132fca064f14894b866613b8acac0d804104d45ec730a3ab1a4017770"
-dependencies = [
- "log",
-]
-
-[[package]]
 name = "clap"
 version = "4.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1084,9 +1075,7 @@ dependencies = [
 name = "sysrs"
 version = "0.1.0"
 dependencies = [
- "async-recursion",
  "async-trait",
- "cgroups",
  "clap",
  "futures",
  "futures-util",
@@ -1097,7 +1086,6 @@ dependencies = [
  "tokio-stream",
  "toml",
  "zbus",
- "zvariant",
 ]
 
 [[package]]

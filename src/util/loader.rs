@@ -17,7 +17,7 @@ pub(crate) fn str_to_unitids(s: &str) -> Box<[UnitId]> {
     s.split(',')
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
-        .map(|s| UnitId::from(s))
+        .map(UnitId::from)
         .collect()
 }
 

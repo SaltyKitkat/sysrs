@@ -56,20 +56,19 @@ impl StateStore {
     pub(crate) fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
         tokio::task::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                let ref mut this = self;
                 match msg {
-                    Message::DbgPrint => println!("{:#?}", this.state),
+                    Message::DbgPrint => println!("{:#?}", self.state),
                     Message::Get(id, s) => {
-                        if let Some(&state) = this.state.get(&id) {
+                        if let Some(&state) = self.state.get(&id) {
                             s.send(state).ok();
                         } else {
                             s.send(State::Uninit).ok();
                         }
                     }
                     Message::Monitor { id, s, cond } => {
-                        let state = this.state.get(&id).copied().unwrap_or_default();
+                        let state = self.state.get(&id).copied().unwrap_or_default();
                         if cond(state) {
-                            match this.monitor.entry(id) {
+                            match self.monitor.entry(id) {
                                 Entry::Occupied(mut o) => {
                                     o.get_mut().push(s);
                                 }
@@ -81,15 +80,15 @@ impl StateStore {
                             s.send(Err(state)).unwrap();
                         }
                     }
-                    Message::Set(id, new_state) => this.set(id, new_state).await,
+                    Message::Set(id, new_state) => self.set(id, new_state).await,
                     Message::SetWithCondition {
                         id,
                         new_state,
                         condition,
                     } => {
-                        let old_state = this.state.get(&id).unwrap_or(&State::Uninit);
+                        let old_state = self.state.get(&id).unwrap_or(&State::Uninit);
                         if condition(*old_state) {
-                            this.set(id, new_state).await;
+                            self.set(id, new_state).await;
                         }
                     }
                 }

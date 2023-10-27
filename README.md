@@ -16,7 +16,7 @@
   struct Actor { ... }
   impl Actor {
     pub fn new() -> Self
-    pub fn run(self, mut rx: Receiver<Message>) -> JoinHandle<()> {
+    pub fn run(mut self, mut rx: Receiver<Message>) -> JoinHandle<()> {
       tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
           match msg { ... }
@@ -65,36 +65,43 @@
     - api
     ```rust
     pub(crate) enum Message {
+        /// 加载一个Unit的依赖信息
+        Load(UnitId, Rc<UnitDeps>),
         /// 增加一项等待启动的Unit
-        Insert(UnitId, Rc<UnitDeps>),
+        AddToStart(UnitId),
+        AddToStop(UnitId),
         /// 收到通知事件：指定Unit的状态发生改变
         StateChange(UnitId, State),
     }
     ```
     - 引用的其他actor
-      - GuardStore
+      - GuardStore StateStore GuardStore
 
   - GuardStore
     - 储存Unit的运行时守护task
     - api
     ```rust
     pub(crate) enum Message {
+        /// Query if guard of the specific unit exists
+        Contains(UnitId, oneshot::Sender<bool>),
         /// Insert a guard.
-        Insert(UnitObj),
+        Insert(UnitId),
         /// remove a guard \
         /// usually called by self when a gurad quits
         Remove(UnitId),
         /// notice all deps are ready for a specific unit \
         /// called by `Dep`
         DepsReady(UnitId),
+        /// notice there's at least one required dep of the specific unit failed
+        DepsFailed(UnitId),
         /// Send a Stop message to the specific unit guard
         Stop(UnitId),
+        /// Notify a unit that it already dead
+        NotifyDead(UnitId),
     }
     ```
     - 引用的其他actor
-      - DepStore
-      - GuardStore(self)
-      - StateStore
+      - DepStore StateStore UnitStore MountMonitorStore
 
   - StateStore
     - 储存Unit的状态信息。目前的状态如下：
@@ -137,7 +144,7 @@
     }
     ```
     - 引用的其他actor
-      - Dep
+      - DepStore
 
   - UnitStore
     - 存储Unit静态信息，并负责Unit的start, stop, restart等动作的发出，以及依赖解析
@@ -159,7 +166,18 @@
     }
     ```
     - 引用的其他actor
-      - GuardStore
+      - DepStore
+  - MountMonitorStore
+    - 挂载点监控
+    - api
+    ```rust
+    pub(crate) enum Message {
+        Registor(UnitId),
+        Remove(UnitId),
+    }
+    ```
+    - 引用的其他Store
+      GuardStore
 
 - signal handler
   - 利用tokio自带机制完成注册

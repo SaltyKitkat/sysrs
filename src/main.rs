@@ -59,15 +59,12 @@ async fn async_main() {
     //     .await;
     // dbg!(store);
 
-    println!("before insert unit");
+    println!("loading units ...");
     update_units(&actors.store, load_units_from_dir("./units").await).await;
-    println!("after insert unit");
-    start_unit(&actors.store, UnitId::from("t0.service")).await;
-    // start_unit(&actors.store, UnitEntry::from("dbus-system.service")).await;
-    sleep(Duration::from_secs(3)).await;
-    // let _conn = connect_dbus(DbusServer::new(actors.store.clone(), actors.state.clone()))
-    //     .await
-    //     .unwrap();
+    println!("units loaded!");
+    let _conn = connect_dbus(DbusServer::new(actors.store.clone(), actors.state.clone()))
+        .await
+        .unwrap();
     sleep(Duration::from_secs(300)).await;
     println!("tokio finished!");
 }

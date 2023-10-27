@@ -1,4 +1,4 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 
 use tokio::{
     sync::{
@@ -14,22 +14,14 @@ use crate::unit::{State, UnitId};
 type MonitorRet = oneshot::Sender<Result<State, State>>;
 
 pub(crate) enum Message {
-    /// 打印内部信息，用于调试
+    /// for debug
     DbgPrint,
-    /// 获得指定Unit的状态
+    /// get state of the unit
     Get(UnitId, oneshot::Sender<State>),
-    /// 注册一个hook,用于监听特性unit的状态改变 \
-    /// 是一个坏的api：由于unit start之后，set state的时机无法确定， \
-    ///     因此想要在start一类操作之后获得state作为结果的情景无法使用此api实现
-    Monitor {
-        id: UnitId,
-        s: MonitorRet,
-        cond: Box<dyn FnOnce(State) -> bool + Send + 'static>,
-    },
-    /// 无条件设置指定Unit的状态
+    /// set state of the unit
     Set(UnitId, State),
-    /// 以当前状态作为条件决定是否设置指定Unit状态 \
-    /// 一定程度上相当于对指定Unit的状态进行CAS原子操作
+    /// set state of the unit due to current state
+    /// CAS
     SetWithCondition {
         id: UnitId,
         new_state: State,
@@ -40,7 +32,6 @@ pub(crate) enum Message {
 #[derive(Debug)]
 pub(crate) struct StateStore {
     state: HashMap<UnitId, State>,
-    monitor: HashMap<UnitId, Vec<MonitorRet>>,
     dep: Sender<dep::Message>,
 }
 
@@ -48,7 +39,6 @@ impl StateStore {
     pub(crate) fn new(dep: Sender<dep::Message>) -> Self {
         Self {
             state: Default::default(),
-            monitor: Default::default(),
             dep,
         }
     }
@@ -63,21 +53,6 @@ impl StateStore {
                             s.send(state).ok();
                         } else {
                             s.send(State::Uninit).ok();
-                        }
-                    }
-                    Message::Monitor { id, s, cond } => {
-                        let state = self.state.get(&id).copied().unwrap_or_default();
-                        if cond(state) {
-                            match self.monitor.entry(id) {
-                                Entry::Occupied(mut o) => {
-                                    o.get_mut().push(s);
-                                }
-                                Entry::Vacant(v) => {
-                                    v.insert(vec![s]);
-                                }
-                            }
-                        } else {
-                            s.send(Err(state)).unwrap();
                         }
                     }
                     Message::Set(id, new_state) => self.set(id, new_state).await,
@@ -96,23 +71,15 @@ impl StateStore {
         })
     }
 
-    /// 设置unit状态时统一使用此api,以触发monitor
+    /// use this to set state
+    /// in order to send notifications
     async fn set(&mut self, id: UnitId, state: State) {
         println!("setting state: `{}` to `{}`", id, state);
-        self.trigger_monitors(&id, state);
         self.state.insert(id.clone(), state);
         self.dep
             .send(dep::Message::StateChange(id, state))
             .await
             .unwrap()
-    }
-
-    fn trigger_monitors(&mut self, id: &UnitId, new_state: State) {
-        if let Some(monitors) = self.monitor.remove(id) {
-            for monitor in monitors {
-                monitor.send(Ok(new_state)).ok();
-            }
-        }
     }
 }
 
@@ -151,23 +118,6 @@ pub(crate) async fn set_state_with_condition(
         .await
         .unwrap();
     r.await.unwrap()
-}
-
-pub(crate) async fn register_state_monitor(
-    state_manager: &Sender<Message>,
-    id: UnitId,
-    cond: impl FnOnce(State) -> bool + Send + 'static,
-) -> oneshot::Receiver<Result<State, State>> {
-    let (s, r) = oneshot::channel();
-    state_manager
-        .send(Message::Monitor {
-            id,
-            s,
-            cond: Box::new(cond),
-        })
-        .await
-        .unwrap();
-    r
 }
 
 pub(crate) async fn print_state(state_manager: &Sender<Message>) {

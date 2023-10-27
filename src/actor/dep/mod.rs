@@ -55,12 +55,13 @@ struct FullDepInfo {
 }
 
 pub(crate) enum Message {
-    /// 加载一个Unit的依赖信息
+    /// Load depinfo of the unit
     Load(UnitId, Rc<UnitDeps>),
-    /// 增加一项等待启动的Unit
+    /// add a unit waiting to start
     AddToStart(UnitId),
+    /// add a unit waiting to stop
     AddToStop(UnitId),
-    /// 收到通知事件：指定Unit的状态发生改变
+    /// receive notify: state of the unit has changed
     StateChange(UnitId, State),
 }
 pub(crate) struct DepStore {

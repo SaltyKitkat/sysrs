@@ -9,26 +9,24 @@ use tokio::{
 };
 
 use super::dep;
-use crate::{
-    unit::{UnitId, UnitObj},
-    Rc,
-};
+use crate::unit::{UnitId, UnitObj};
 
 pub(crate) mod utils;
 
 pub(crate) enum Message {
-    /// 用于调试 打印内部信息
+    /// for debug
     DbgPrint,
-    /// 用于更新/插入对应Unit的静态信息
+    /// update/insert static info of the unit
     Update(UnitId, UnitObj),
-    /// 移除Store中的指定Unit
+    /// remove the unit from store
     Remove(UnitId),
+    /// get the static info of the unit
     Get(UnitId, oneshot::Sender<UnitObj>),
-    /// 启动指定Unit
+    /// start the unit
     Start(UnitId),
-    /// 停止指定Unit
+    /// stop the unit
     Stop(UnitId),
-    /// 重启指定Unit
+    /// restart the unit
     Restart(UnitId),
 }
 
@@ -43,7 +41,6 @@ impl UnitStore {
         Self {
             map: HashMap::new(),
             dep,
-            // guard_manager,
         }
     }
 
@@ -55,7 +52,7 @@ impl UnitStore {
                     Message::Update(id, unit) => {
                         println!("updating unit: {:?}", &id);
                         if let Some(old) = self.map.insert(id.clone(), unit.clone()) {
-                            todo!("增量更新依赖信息");
+                            todo!("feature: update dep_info");
                         } else {
                             self.dep
                                 .send(dep::Message::Load(id, unit.deps()))

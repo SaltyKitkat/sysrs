@@ -1,14 +1,8 @@
-use std::time::Duration;
-
 use rustix::process;
-use tokio::time::sleep;
+use tokio::task::yield_now;
 
 use crate::{
-    actor::{
-        unit::utils::{start_unit, update_units},
-        Actors,
-    },
-    unit::UnitId,
+    actor::{unit::utils::update_units, Actors},
     util::{
         dbus::{connect_dbus, DbusServer},
         event::register_sig_handlers,
@@ -65,6 +59,8 @@ async fn async_main() {
     let _conn = connect_dbus(DbusServer::new(actors.store.clone(), actors.state.clone()))
         .await
         .unwrap();
-    sleep(Duration::from_secs(300)).await;
-    println!("tokio finished!");
+    loop {
+        // todo: handle actor failure
+        yield_now().await;
+    }
 }

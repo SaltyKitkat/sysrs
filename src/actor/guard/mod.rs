@@ -10,13 +10,13 @@ use tokio::{
 };
 
 use super::{
-    dep,
+    dep, mount_monitor,
     state::{self, set_state},
     unit::{self, utils::get_unit},
 };
 use crate::{
     actor::state::set_state_with_condition,
-    unit::{RtMsg, State, UnitId, UnitObj},
+    unit::{RtMsg, State, UnitId, UnitKind, UnitObj},
 };
 
 struct Extra {}
@@ -25,6 +25,7 @@ pub(crate) enum GuardMessage {
     DepsReady,
     DepsFailed,
     Stop,
+    NotifyDead,
 }
 
 /// the guard during the lifetime of the unit
@@ -67,6 +68,7 @@ impl Guard {
                         set_state(&self.state, id.clone(), State::Stopped).await; // maybe unnecessary since the unit is not active here?
                         return;
                     }
+                    GuardMessage::NotifyDead => todo!(),
                 }
             }
 
@@ -104,6 +106,9 @@ impl Guard {
                                 Err(()) => todo!(),
                             }
                         },
+                        GuardMessage::NotifyDead => {
+                            break State::Stopped
+                        }
                     },
                     rt_msg = handle.wait() => match rt_msg {
                         RtMsg::Yield => (),
@@ -134,6 +139,8 @@ pub(crate) enum Message {
     DepsFailed(UnitId),
     /// Send a Stop message to the specific unit guard
     Stop(UnitId),
+    /// Notify a unit that it already dead
+    NotifyDead(UnitId),
 }
 
 #[derive(Debug, Clone)]
@@ -142,6 +149,7 @@ pub(crate) struct GuardStore {
     dep: Sender<dep::Message>,
     state: Sender<state::Message>,
     unit: Sender<unit::Message>,
+    mount_monitor: Sender<mount_monitor::Message>,
 }
 
 impl GuardStore {
@@ -149,12 +157,14 @@ impl GuardStore {
         dep: Sender<dep::Message>,
         state: Sender<state::Message>,
         unit: Sender<unit::Message>,
+        mount_monitor: Sender<mount_monitor::Message>,
     ) -> Self {
         Self {
-            map: HashMap::new(),
+            map: Default::default(),
             dep,
             state,
             unit,
+            mount_monitor,
         }
     }
 
@@ -176,6 +186,13 @@ impl GuardStore {
                     Message::Insert(id) => {
                         println!("guard: inserting {}", id);
                         let unitobj = get_unit(&self.unit, id.clone()).await.unwrap();
+                        // hack for mountpoint monitor
+                        if unitobj.kind() == UnitKind::Mount {
+                            self.mount_monitor
+                                .send(mount_monitor::Message::Registor(id.clone()))
+                                .await
+                                .unwrap();
+                        }
                         match self.map.entry(id.clone()) {
                             Entry::Occupied(mut o) if o.get().is_closed() => {
                                 let (sender, recevier) = mpsc::channel(4); // todo: remove magic number
@@ -217,6 +234,20 @@ impl GuardStore {
                         if let Some(guard) = self.map.get(&id) {
                             guard.send(GuardMessage::Stop).await.ok(); // ignore error here since guard already dropped, this is useless to send
                         }
+                        if id.kind() == UnitKind::Mount {
+                            self.mount_monitor
+                                .send(mount_monitor::Message::Remove(id))
+                                .await
+                                .unwrap();
+                        }
+                    }
+                    Message::NotifyDead(id) => {
+                        self.map
+                            .get(&id)
+                            .unwrap()
+                            .send(GuardMessage::NotifyDead)
+                            .await
+                            .ok();
                     }
                 }
             }

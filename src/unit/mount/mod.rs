@@ -7,12 +7,12 @@ use crate::{
     unit::{Unit, UnitKind},
     util::{
         loader::{empty_dep, empty_str},
-        mount::{mount, unmount},
+        mount::{mount, mount_point_to_unit_name, unmount},
     },
     Rc,
 };
 
-use super::{RtMsg, UnitCommon, UnitDeps, UnitHandle, UnitImpl};
+use super::{RtMsg, State, UnitCommon, UnitDeps, UnitHandle, UnitImpl};
 
 pub(crate) type Impl = Rc<MountInfo>;
 pub(super) struct Handle;
@@ -24,7 +24,6 @@ impl super::Handle for Handle {
         Ok(())
     }
     async fn wait(&mut self) -> RtMsg {
-        // todo: monitor mount point
         pending().await // never return
     }
 }
@@ -38,16 +37,7 @@ impl From<FsEntry> for Impl {
 impl From<Impl> for UnitImpl<Impl> {
     fn from(value: Impl) -> Self {
         let name = value.mount_point.to_str().unwrap();
-        let name = (if let Some(s) = name.strip_prefix('/') {
-            if s.is_empty() {
-                String::from('-')
-            } else {
-                s.replace('-', "\\x2d").replace('/', "-")
-            }
-        } else {
-            name.replace('-', "\\x2d").replace('/', "-")
-        } + ".mount")
-            .into();
+        let name = mount_point_to_unit_name(name).into();
         let common = UnitCommon {
             name,
             description: empty_str(),

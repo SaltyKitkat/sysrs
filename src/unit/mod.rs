@@ -112,6 +112,19 @@ impl<T: Unit + ?Sized> From<&T> for UnitId {
     }
 }
 
+impl UnitId {
+    pub(crate) fn kind(&self) -> UnitKind {
+        match self.name.rsplit_once('.').unwrap().1 {
+            "service" => UnitKind::Service,
+            "timer" => UnitKind::Timer,
+            "mount" => UnitKind::Mount,
+            "target" => UnitKind::Target,
+            "socket" => UnitKind::Socket,
+            _ => unreachable!(),
+        }
+    }
+}
+
 type ChildStdio = (ChildStdin, ChildStdout, ChildStderr);
 pub(crate) struct Extra {
     pub basic_io: Option<oneshot::Sender<ChildStdio>>,

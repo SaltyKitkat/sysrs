@@ -13,6 +13,7 @@ async-trait = "0.1.73"
 clap = { version = "4.4.4", features = ["derive"] }
 futures = "0.3.28"
 futures-util = "0.3.28"
+notify = "6.1.1"
 rustix = { version = "0.38.2", features = ["fs", "process", "thread"] }
 serde = { version = "1.0.188", features = ["derive"] }
 tap = "1.0.1"

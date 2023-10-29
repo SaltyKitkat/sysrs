@@ -95,7 +95,10 @@ impl Unit for UnitImpl<Impl> {
                 let exec_start = self.sub.exec_start.clone();
                 match run_cmd(&exec_start) {
                     Ok(child) => Ok(Box::new(Handle::Process(child))),
-                    Err(_) => Err(()),
+                    Err(e) => {
+                        println!("{}: {}", self.name(), e);
+                        Err(())
+                    }
                 }
             }
             Kind::Forking => todo!(),

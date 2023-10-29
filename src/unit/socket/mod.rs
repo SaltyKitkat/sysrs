@@ -1,7 +1,6 @@
 use std::{mem, os::unix::net::UnixListener, path::Path};
 
 use async_trait::async_trait;
-use futures::future::pending;
 use tap::Tap;
 use tokio::{io::unix::AsyncFd, sync::oneshot};
 
@@ -41,14 +40,14 @@ impl super::Handle for Handle {
                 read_ready.retain_ready();
                 let (s, r) = oneshot::channel();
                 self.rt_state = RtState::Starting(r);
-                return RtMsg::TriggerStart(self.service.clone(), Extra { basic_io: Some(s) });
+                RtMsg::TriggerStart(self.service.clone(), Extra { basic_io: Some(s) })
             }
             RtState::Starting(_) => {
                 if let RtState::Starting(r) = mem::replace(&mut self.rt_state, RtState::Listening) {
                     match r.await {
                         Ok(child_stdio) => {
                             self.rt_state = RtState::Running(child_stdio);
-                            return RtMsg::Yield;
+                            RtMsg::Yield
                         }
                         Err(_) => todo!(),
                     }
@@ -56,9 +55,8 @@ impl super::Handle for Handle {
                     unreachable!()
                 }
             }
-            RtState::Running((child_in, child_out, child_err)) => todo!(),
+            RtState::Running(_) => todo!(),
         }
-        pending().await
     }
 }
 

@@ -1,6 +1,6 @@
 use std::{collections::HashSet, time::Duration};
 
-use notify::{Config, PollWatcher, Watcher};
+use notify::{Config, PollWatcher, RecursiveMode, Watcher};
 use tap::Pipe;
 use tokio::{
     fs, select,
@@ -46,10 +46,7 @@ impl MountMonitorStore {
         )
         .unwrap();
         watcher
-            .watch(
-                "/proc/self/mountinfo".as_ref(),
-                notify::RecursiveMode::NonRecursive,
-            )
+            .watch("/proc/self/mountinfo".as_ref(), RecursiveMode::NonRecursive)
             .unwrap();
         tokio::spawn(async move {
             loop {

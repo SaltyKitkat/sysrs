@@ -1,4 +1,4 @@
 name = "sshd.service"
 kind = "Simple"
-start = "/usr/bin/sshd -D"
+start = "/usr/sbin/sshd -D"
 wants = "ssh-keygen.target"
